@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker Compose 設定変更実習</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+  <header class="bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950 text-white">
+    <div class="mx-auto max-w-6xl px-6 py-14">
+      <p class="text-xs font-bold uppercase tracking-[.25em] text-sky-300">Hands-on Lab</p>
+      <h1 class="mt-3 text-3xl font-black md:text-5xl">
+        <span class="mr-3 inline-block rounded-lg bg-emerald-500 px-3 py-1 text-xl align-middle text-slate-950 md:text-2xl">実習</span>
+        Docker で試す PHP・Nginx設定変更実習
+      </h1>
+      <p class="mt-5 max-w-3xl leading-relaxed text-slate-200">
+        設定を変更し、反映し、結果を確認するところまでを1セットで練習します。
+        CLIを基本とし、Docker Desktopで対応する操作も補足します。
+      </p>
+      <p class="mt-3 max-w-3xl text-sm leading-relaxed text-amber-200">
+        本番環境ではなく、教材用環境（127.0.0.1）でのみ実施してください。
+        実在するパスワードやAPIキーは置かず、ダミー値だけで確認してください。
+      </p>
+      <div class="mt-7 flex flex-wrap gap-3">
+        <a href="preview.html"
+          class="rounded-xl border border-white/20 bg-white/10 px-4 py-3 font-semibold hover:bg-white/20">← 解説</a>
+        <a href="#start" class="rounded-xl bg-sky-500 px-4 py-3 font-semibold hover:bg-sky-400">実習を始める</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl space-y-8 px-6 py-10">
+    <nav class="glass rounded-3xl p-6 shadow-lg">
+      <h2 class="text-xl font-black">実習メニュー</h2>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <a href="#start" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">1. 起動と確認</a>
+        <a href="#holes" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">2. 修正前の弱点</a>
+        <a href="#phpini" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">3. php.ini</a>
+        <a href="#nginx" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">4. Nginx</a>
+        <a href="#patch" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">5. バージョン更新</a>
+        <a href="#record" class="rounded-xl bg-white p-3 font-semibold hover:bg-sky-50">6. 記録と後片付け</a>
+      </div>
+    </nav>
+
+    <section id="start" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">1. 初回ビルドと起動</h2>
+      <p class="mt-2 text-slate-600">PowerShell、Windows Terminal、macOSのターミナルで、教材フォルダーへ移動して実行します。</p>
+
+      <div class="mt-5 space-y-3">
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose build</pre>
+        </div>
+        <div class="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
+          <span class="code">docker compose up -d</span> だけでも、イメージが無ければ自動でビルドされます。
+          ここではビルドの失敗と起動の失敗を切り分けられるよう、<span class="code">build</span> を別の手順にしています。
+          <span class="code">Dockerfile</span> を変更したあとは、再度 <span class="code">build</span> が必要です。
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose up -d</pre>
+        </div>
+        <p class="text-sm text-slate-600"><span class="code">composer-install</span> サービスが <span
+            class="code">src/vendor/</span> を自動生成してから、<span class="code">php</span> と <span
+            class="code">nginx</span> が起動します。</p>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose ps</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-xs leading-6">NAME                       IMAGE                  COMMAND                   SERVICE   CREATED          STATUS          PORTS
+docker-php2shell-nginx-1   nginx:stable           "/docker-entrypoint.…"   nginx     25 minutes ago   Up 25 minutes   127.0.0.1:8099->80/tcp
+docker-php2shell-php-1     docker-php2shell-php   "docker-php-entrypoi…"   php       25 minutes ago   Up 25 minutes   9000/tcp</pre>
+        </div>
+        <p class="text-sm text-slate-600">
+          <span class="code">docker compose ps</span> は動いているコンテナだけを表示します。
+          終了した <span class="code">composer-install</span> も見るには <span class="code">docker compose ps -a</span>
+          を使い、<span class="code">Exited (0)</span> なら正常です。
+        </p>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose logs --tail=50 php nginx</pre>
+        </div>
+      </div>
+
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <h3 class="font-black text-emerald-950">ブラウザで確認</h3>
+          <p class="mt-2 text-sm text-emerald-900"><a class="code underline" href="http://127.0.0.1:8099/"
+              target="_blank" rel="noopener noreferrer">http://127.0.0.1:8099/</a> を開きます。</p>
+        </div>
+        <div class="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+          <h3 class="font-black text-sky-950">Docker Desktopの場合</h3>
+          <p class="mt-2 text-sm leading-relaxed text-sky-900">Containers画面でComposeプロジェクトを開き、<span
+              class="code">php</span> と <span class="code">nginx</span> がRunningになっていることを確認します。ログは各コンテナのLogsタブで確認できます。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="holes" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">2. 設定変更前にセキュリティ上の弱点を確認</h2>
+      <p class="mt-2 leading-relaxed text-slate-600">
+        修正後の違いを判断できるように、まず初期状態のレスポンスとログを記録します。
+        以下は <span class="font-bold text-rose-700">127.0.0.1で動く教材用環境だけ</span> で実施してください。
+      </p>
+
+      <div class="mt-6 space-y-5">
+        <article class="rounded-2xl border border-rose-200 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-rose-600">A</span>PHPの存在とバージョン情報の露出</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            <span class="code">expose_php=On</span> では、レスポンスヘッダーに <span class="code">X-Powered-By</span> が付く場合があります。
+          </p>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># まずスクリプトで確認する</span>
+python scripts/check_php_version.py</pre>
+          </div>
+          <div class="mt-3 overflow-auto rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-xs leading-6">NG: X-Powered-Byヘッダーが公開されています: PHP/8.4.26（HTTP 200）
+NG: PHP 8.4.26 は最低要件 8.4.27 を満たしていません。</pre>
+          </div>
+          <div class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
+            バージョンが公開されていること（<span class="code">NG</span>）と、最低要件（8.4.27）を満たしていないことが分かります。
+            <span class="code">curl</span> やブラウザでも、同じ <span class="code">X-Powered-By</span> ヘッダーを確認できます。
+          </div>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># Windows PowerShell</span>
+curl.exe -I http://127.0.0.1:8099/
+
+<span class="text-slate-400"># macOS / Linux</span>
+curl -I http://127.0.0.1:8099/
+
+<span class="text-slate-400"># 確認箇所</span>
+X-Powered-By: PHP/...</pre>
+          </div>
+          <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
+            <h4 class="font-black">ブラウザから確認する方法</h4>
+            <ol class="mt-2 space-y-2">
+              <li>1. <a href="/" target="_blank" rel="noopener noreferrer"
+                  class="font-bold underline">公開ページを新しいタブで開く</a></li>
+              <li>2. 画面上部に表示される <span class="code">PHP 8.x.x</span> から、PHPの存在とバージョンを確認する</li>
+              <li>3. ブラウザの開発者ツールを開き、Network（ネットワーク）でページのレスポンスヘッダーを表示する</li>
+              <li>4. <span class="code">X-Powered-By: PHP/...</span> が含まれるか確認する</li>
+            </ol>
+            <figure class="mt-4 w-full overflow-hidden rounded-xl border border-sky-200 bg-white p-2 md:w-1/2">
+              <img src="images/devtool_php_header.png"
+                alt="ブラウザ開発者ツールのNetworkタブで、レスポンスヘッダーのX-Powered-ByにPHP 8.4.26が表示されている画面" width="600" loading="lazy"
+                class="h-auto w-full rounded-lg">
+              <figcaption class="px-2 pb-1 pt-3 text-xs text-slate-600">
+                Network → 対象リクエスト → Headersを開き、Response Headersの
+                <span class="code">X-Powered-By</span> を確認します。
+              </figcaption>
+            </figure>
+          </div>
+        </article>
+
+        <article class="rounded-2xl border border-rose-200 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-rose-600">B</span>エラー画面からの内部情報の露出</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            教材専用URLで意図的にFatal errorを発生させ、ファイルの絶対パスなどが画面へ出るか確認します。
+          </p>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># Windows PowerShell</span>
+curl.exe -i "http://127.0.0.1:8099/?demo=fatal"
+
+<span class="text-slate-400"># macOS / Linux</span>
+curl -i "http://127.0.0.1:8099/?demo=fatal"
+
+<span class="text-slate-400"># あわせてPHPログを確認</span>
+docker compose logs --tail=50 php</pre>
+          </div>
+          <a href="/?demo=fatal" target="_blank" rel="noopener noreferrer"
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">ブラウザで教材用エラーを開く（?demo=fatal）</a>
+        </article>
+
+        <article class="rounded-2xl border border-rose-200 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-rose-600">C</span>公開領域にある.envの直接取得</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            初期状態ではNginxのドットファイル拒否がコメントアウトされています。
+            教材用のダミー値をコピーして <span class="code">public/.env</span> を用意し、HTTPで取得できることを確認します。
+          </p>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># 教材用のダミー .env を用意する</span>
+cp src/public/.env.sample src/public/.env
+
+<span class="text-slate-400"># まずスクリプトで確認する（.env の内容を検査）</span>
+python scripts/get_env.py</pre>
+          </div>
+          <div class="mt-3 overflow-auto rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-xs leading-6">NG: http://127.0.0.1:8099/.env から内容を取得できました（HTTP 200）。
+----- .env content -----
+API_KEY=dummy
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=sample
+DB_USERNAME=root
+DB_PASSWORD=secret
+----- end -----</pre>
+          </div>
+          <div class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
+            <span class="code">curl</span> でも同じことを確認できます。
+          </div>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># Windows PowerShell</span>
+curl.exe -i http://127.0.0.1:8099/.env
+
+<span class="text-slate-400"># macOS / Linux</span>
+curl -i http://127.0.0.1:8099/.env</pre>
+          </div>
+          <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">
+            <span class="code">API_KEY=dummy</span> などの中身がそのまま返ります。<span class="code">200 OK</span>
+            だけでなく、内容が <span class="code">.env</span> の値であることまで確認してください
+            （作り忘れると、教材ページ自体が返るため <span class="code">200</span> になります。
+            <span class="code">get_env.py</span> は中身まで判定するので、その事故に気づけます）。
+          </div>
+          <a href="/.env" target="_blank" rel="noopener noreferrer"
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">ブラウザで /.env を開く</a>
+          <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            実在するパスワードやAPIキーは置かず、リポジトリに用意されたダミーファイルだけで確認してください。
+          </div>
+        </article>
+
+        <article class="rounded-2xl border border-amber-200 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-amber-600">D</span>ファイルアップロード機能の攻撃面</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            <span class="code">file_uploads=On</span> 自体は脆弱性ではありませんが、検証不足や公開領域への保存があると危険です。
+            教材ページは受信確認だけを行い、ファイルを保存しません。
+          </p>
+          <a href="/?demo=upload" target="_blank" rel="noopener noreferrer"
+            class="mt-3 inline-block rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-400">アップロード確認ページを開く（?demo=upload）</a>
+          <ul class="mt-4 space-y-1 text-sm text-slate-600">
+            <li>• 1MB未満の無害なテキストファイルで確認する</li>
+            <li>• <span class="code">$_FILES</span> に入り、一時ファイルとして受信されたことを記録する</li>
+            <li>• 実習ページが永続保存を行っていないことを確認する</li>
+          </ul>
+        </article>
+
+        <article class="rounded-2xl border border-rose-300 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-rose-600">E</span>任意の PHP ファイルが実行される</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            教材の初期状態では、<span class="code">index.php</span> だけに限定する設定（<span class="code">TODO</span>）が
+            コメントアウトされており、<span class="code">public/</span> 内のどの <span class="code">.php</span> も実行できてしまいます。
+          </p>
+          <a href="/info.php" target="_blank" rel="noopener noreferrer"
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">phpinfo() を開く（/info.php）</a>
+          <p class="mt-3 text-sm leading-relaxed text-slate-600">
+            PHP のバージョン・読み込まれた設定ファイル・<span class="code">disable_functions</span>・<span
+              class="code">open_basedir</span> などの内部情報が画面に表示されます。
+          </p>
+        </article>
+
+        <article class="rounded-2xl border border-rose-300 bg-white p-5">
+          <h3 class="text-lg font-black"><span class="mr-2 text-rose-600">F</span>危険な関数（exec）が実行できる</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-600">
+            教材の初期状態では <span class="code">php.ini</span> の <span class="code">disable_functions</span> の行が
+            コメントアウトされ、<span class="code">exec()</span> が無効化されていません。
+          </p>
+          <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec デモを開く（/exec-demo.php）</a>
+          <p class="mt-3 text-sm leading-relaxed text-slate-600">
+            実行できるコマンドは <span class="code">ls</span> だけに限定していますが、それでも
+            DocumentRoot の外（<span class="code">src/</span> 全体）まで一覧できてしまいます。
+          </p>
+          <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            <span class="code">exec-demo.php</span> と <span class="code">info.php</span> は教材専用です。
+            確認後は <span class="code">src/public/</span> から削除してください。
+          </div>
+        </article>
+      </div>
+
+      <div
+        class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-relaxed text-emerald-950">
+        <strong>修正後の目標：</strong>
+        <span class="code">X-Powered-By</span> を出さない、エラー詳細を画面へ出さない、
+        <span class="code">/.env</span> を拒否する、アップロードを使う場合は検証と保存先を限定する、
+        実行する PHP を <span class="code">index.php</span> だけに限定する、
+        <span class="code">disable_functions</span> と <span class="code">allow_url_include</span> を対策する、
+        という差を確認します。
+      </div>
+    </section>
+
+    <section id="phpini" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">3. php.iniを変更して確認</h2>
+      <p class="mt-2 text-slate-600">編集対象は <span class="code">php/php.ini</span>
+        です。ホストから読み取り専用でマウントされるため、ホスト側のファイルを編集します。</p>
+
+      <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 class="text-lg font-black text-slate-900">変更前にスクリプトで確認する</h3>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">python scripts/check_php_ini.py</pre>
+        </div>
+        <div class="mt-3 overflow-auto rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-xs leading-6">NG: expose_php = On（期待値: Off）
+NG: display_errors = On（期待値: Off）
+OK: display_startup_errors = Off（期待値: Off）
+OK: log_errors = On（期待値: On）
+OK: error_log = /proc/self/fd/2（期待値: /proc/self/fd/2）
+NG: error_reporting = 30719（期待値: E_ALL）
+OK: allow_url_fopen = Off（期待値: Off）
+NG: allow_url_include = On（期待値: Off）
+OK: open_basedir = /var/www/html:/tmp（期待値: /var/www/html と /tmp を含む）
+NG: file_uploads = On（期待値: Off）
+OK: max_execution_time = 10（期待値: 1〜10秒）
+OK: memory_limit = 128M（期待値: 128M）
+OK: session.use_strict_mode = On（期待値: On）
+OK: session.use_only_cookies = On（期待値: On）
+OK: session.cookie_httponly = On（期待値: On）
+OK: session.cookie_samesite = Lax（期待値: Lax または Strict）
+OK: session.upload_progress.enabled = Off（期待値: Off）
+NG: disable_functions で未無効化: exec, passthru, pcntl_exec, popen, proc_open, shell_exec, system
+INFO: session.cookie_secure = Off（HTTPS化した場合は --require-secure-cookie で検査）
+RESULT: 6件の設定不備があります。</pre>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-slate-600">
+          このスクリプトは <span class="code">docker compose exec</span> で <span class="code">php</span> コンテナの
+          <span class="code">php-fpm -i</span> を実行し、実際に有効な値を一度にまとめて検査します。
+          <span class="code">error_reporting</span> が NG と表示される場合がありますが、これは
+          <span class="code">allow_url_include = On</span> によって生じる非推奨警告がスクリプトの比較処理に影響するためで、
+          <span class="code">allow_url_include</span> を Off にすると解消します。
+        </p>
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+        <h3 class="text-lg font-black text-violet-950">実習例：PHP情報の露出を止める</h3>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 変更前</span>
+expose_php = On
+display_errors = On
+
+<span class="text-slate-400"># 変更後</span>
+expose_php = Off
+display_errors = Off</pre>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-violet-950">変更後はPHP-FPMを再起動し、新しいワーカーへ設定を読み込ませます。</p>
+      </div>
+
+      <div class="mt-5 space-y-3">
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose restart php</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">python scripts/check_php_ini.py</pre>
+        </div>
+        <p class="text-sm text-slate-600">expose_php と display_errors が OK になり、NG が残りの項目だけになっていれば反映されています。</p>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose exec php php --ini</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># macOS / Linux</span>
+curl -I http://127.0.0.1:8099/
+
+<span class="text-slate-400"># Windows PowerShell</span>
+curl.exe -I http://127.0.0.1:8099/
+
+<span class="text-slate-400"># スクリプトでも確認できる</span>
+python scripts/check_php_version.py</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose logs --tail=50 php</pre>
+        </div>
+      </div>
+
+      <div class="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sm leading-relaxed text-sky-950">
+        <strong>Docker Desktop：</strong>
+        Composeプロジェクト内の <span class="code">php</span> を選び、Restartを実行します。
+        Execタブが利用できる場合は <span class="code">php --ini</span> や <span class="code">php -i</span> も実行できます。
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h3 class="text-lg font-black text-amber-950">（任意）file_uploads も Off にして再確認する</h3>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">file_uploads = Off</pre>
+        </div>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">python scripts/check_php_ini.py</pre>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-amber-950">
+          <span class="code">file_uploads</span> を Off にすると、アップロード確認ページ（?demo=upload）はファイルを受信できなくなります。
+          アップロードの確認（D）を終えてから変更してください。
+        </p>
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-5">
+        <h3 class="text-lg font-black text-rose-950">（任意）allow_url_include と disable_functions も対策する</h3>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># allow_url_include を Off に変更</span>
+allow_url_include = Off
+
+<span class="text-slate-400"># コメントアウトされている disable_functions の ; を外す</span>
+disable_functions = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,show_source,highlight_file,dl,symlink,link,putenv</pre>
+        </div>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose restart php
+python scripts/check_php_ini.py</pre>
+        </div>
+        <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
+          class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec デモで再確認する（/exec-demo.php）</a>
+        <p class="mt-3 text-sm leading-relaxed text-rose-950">
+          「exec() は無効化されています」と表示されれば、<span class="code">disable_functions</span> が効いています。
+          確認が終わったら <span class="code">src/public/exec-demo.php</span> は削除してください。
+        </p>
+      </div>
+
+      <h3 class="mt-7 text-lg font-black">追加で比較しやすい設定</h3>
+      <div class="mt-3 overflow-auto rounded-2xl border border-slate-200 bg-white">
+        <table class="w-full min-w-[680px] text-left text-sm">
+          <thead class="bg-slate-900 text-white">
+            <tr>
+              <th class="p-3">設定</th>
+              <th class="p-3">変更例</th>
+              <th class="p-3">確認すること</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr>
+              <td class="p-3 code">file_uploads</td>
+              <td class="p-3 code">On / Off</td>
+              <td class="p-3"><span class="code">$_FILES</span> に入るか</td>
+            </tr>
+            <tr>
+              <td class="p-3 code">upload_max_filesize</td>
+              <td class="p-3 code">1M / 4M</td>
+              <td class="p-3">上限を超えたファイルのエラー</td>
+            </tr>
+            <tr>
+              <td class="p-3 code">post_max_size</td>
+              <td class="p-3 code">2M / 5M</td>
+              <td class="p-3">POST全体の上限</td>
+            </tr>
+            <tr>
+              <td class="p-3 code">memory_limit</td>
+              <td class="p-3 code">128M / 32M</td>
+              <td class="p-3">処理可能なメモリ量</td>
+            </tr>
+            <tr>
+              <td class="p-3 code">max_input_vars</td>
+              <td class="p-3 code">1000 / 100</td>
+              <td class="p-3">受け取れる入力項目数</td>
+            </tr>
+            <tr>
+              <td class="p-3 code">session.upload_progress.enabled</td>
+              <td class="p-3 code">Off / On</td>
+              <td class="p-3"><span class="code">python scripts/check_php_ini.py</span>
+                の判定が変わること（On だと NG）。<span class="code">file_uploads</span> とは別に、
+                アップロード進捗用のセッションデータを作る経路が増える</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="nginx" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">4. Nginx設定を変更して確認</h2>
+      <p class="mt-2 text-slate-600">編集対象は <span class="code">nginx/default.conf</span> です。反映前に必ず構文を確認します。</p>
+
+      <div class="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-5">
+        <h3 class="text-lg font-black text-rose-950">実習例：ドットファイルを拒否する</h3>
+        <p class="mt-2 text-sm text-rose-900">コメントアウトされている次の設定を有効にします。</p>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">location ~ /\.(?!well-known(?:/|$)) {
+    deny all;
+}</pre>
+        </div>
+      </div>
+
+      <div class="mt-5 space-y-3">
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 構文確認（成功するまで反映しない）</span>
+docker compose exec nginx nginx -t</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 停止せずに設定を再読み込み</span>
+docker compose exec nginx nginx -s reload</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># Windows PowerShell</span>
+curl.exe -i http://127.0.0.1:8099/.env
+
+<span class="text-slate-400"># macOS / Linux</span>
+curl -i http://127.0.0.1:8099/.env
+
+<span class="text-slate-400"># スクリプトでも確認できる</span>
+python scripts/get_env.py</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-xs leading-6">OK: http://127.0.0.1:8099/.env は公開されていません（HTTP 403）。</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose logs --tail=50 nginx</pre>
+        </div>
+      </div>
+
+      <div class="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sm leading-relaxed text-sky-950">
+        <strong>Docker Desktop：</strong>
+        <span class="code">nginx</span> のExecタブで <span class="code">nginx -t</span> を実行できます。
+        Reload操作が見つからない場合はCLIを使うか、構文確認後にnginxコンテナをRestartします。
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+        <h3 class="text-lg font-black text-emerald-950">実習例：実行する PHP を index.php だけにする</h3>
+        <p class="mt-2 text-sm leading-relaxed text-emerald-950">
+          教材の初期状態では、任意の <span class="code">.php</span> を実行する設定だけが有効です。
+          これをコメントアウトしてから、<span class="code">index.php</span> のみ実行する設定と、
+          それ以外を 404 にする設定（どちらも <span class="code">TODO</span>）を有効にします。
+        </p>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 1. コメントアウトする（任意の .php を実行する設定）</span>
+# location ~ \.php$ {
+#     fastcgi_pass php:9000;
+#     include fastcgi_params;
+#     fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+# }
+
+<span class="text-slate-400"># 2. 有効にする（index.php のみ実行）</span>
+location = /index.php {
+    fastcgi_pass php:9000;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+}
+
+<span class="text-slate-400"># 3. 有効にする（それ以外は 404）</span>
+location ~ \.php$ {
+    return 404;
+}</pre>
+        </div>
+        <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <span class="code">location ~</span>（正規表現）は<strong>先に書いたものが優先</strong>されます。
+          任意の <span class="code">.php</span> を実行する設定が残っていると、あとから <span class="code">return 404</span>
+          を有効にしても効きません。必ず先にコメントアウトしてください。
+          <span class="code">location = /index.php</span>（完全一致）は正規表現より優先されます。
+        </div>
+        <div class="mt-3 space-y-3">
+          <div class="overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-sm leading-7">docker compose exec nginx nginx -t
+docker compose exec nginx nginx -s reload</pre>
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-3">
+          <a href="/info.php" target="_blank" rel="noopener noreferrer"
+            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/info.php を開く（404 になるはず）</a>
+          <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
+            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/exec-demo.php を開く（404 になるはず）</a>
+          <a href="/" target="_blank" rel="noopener noreferrer"
+            class="inline-block rounded-lg bg-white border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">/ を開く（動くことを確認）</a>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-emerald-950">
+          確認後は、実習用の <span class="code">src/public/info.php</span> と <span
+            class="code">src/public/exec-demo.php</span> を削除してください。
+        </p>
+      </div>
+    </section>
+
+    <section id="patch" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">5. PHP のバージョンを更新する（パッチ適用）</h2>
+      <p class="mt-2 text-slate-600">
+        Dockerfile の PHP イメージのバージョンを上げ、イメージを作り直して、更新が反映されたことを確認します。
+        パッチバージョンの更新は、既知の脆弱性の修正を取り込むために定期的に行います。
+      </p>
+
+      <div class="mt-5 space-y-3">
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 更新前のバージョンを確認</span>
+docker compose exec php php -v
+python scripts/check_php_version.py</pre>
+        </div>
+        <div class="overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-xs leading-6">NG: X-Powered-Byヘッダーが公開されています: PHP/8.4.26（HTTP 200）
+NG: PHP 8.4.26 は最低要件 8.4.27 を満たしていません。</pre>
+        </div>
+      </div>
+
+      <div class="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+        <h3 class="text-lg font-black text-violet-950">Dockerfile を更新して作り直す</h3>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># FROM php:8.4.26-fpm</span>
+FROM php:8.4.27-fpm</pre>
+        </div>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">docker compose build php
+docker compose up -d php</pre>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-violet-950">
+          Dockerfile を変更したときは <span class="code">restart</span> ではなく <span class="code">build</span> が必要です。
+          <span class="code">restart</span> ではイメージが変わらないため、PHP のバージョンは上がりません。
+        </p>
+      </div>
+
+      <div class="mt-5 space-y-3">
+        <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7"><span class="text-slate-400"># 更新後の確認</span>
+docker compose exec php php -v
+docker compose ps
+python scripts/check_php_version.py</pre>
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
+        バージョンは更新できても、<span class="code">X-Powered-By</span> が公開されている間は検査結果が
+        <span class="code">NG</span> のままです。<span class="code">expose_php</span> を Off にしている場合は、
+        ヘッダーからバージョンを確認できないため、<span class="code">php -v</span> で確認してください。
+      </div>
+    </section>
+
+    <section id="record" class="glass rounded-3xl p-6 shadow-lg md:p-8">
+      <h2 class="text-2xl font-black">6. 実習の記録と後片付け</h2>
+
+      <div class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+        <h3 class="font-black text-emerald-950">実習の記録テンプレート</h3>
+        <ol class="mt-3 space-y-2 text-sm text-emerald-950">
+          <li>1. 変更する設定と変更前の値</li>
+          <li>2. 変更後に起きると予想したこと</li>
+          <li>3. 実行した反映コマンド</li>
+          <li>4. 設定値・HTTPレスポンス・ログの確認結果</li>
+          <li>5. 予想と結果が異なった場合の理由</li>
+        </ol>
+      </div>
+
+      <div class="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-5">
+        <h3 class="font-black text-rose-950">元に戻して確認</h3>
+        <ul class="mt-3 space-y-2 text-sm leading-relaxed text-rose-950">
+          <li>• <span class="code">php/php.ini</span> と <span class="code">nginx/default.conf</span> を変更前の状態へ戻す</li>
+          <li>• <span class="code">src/public/.env</span>（ダミー）、<span class="code">info.php</span>、<span
+              class="code">exec-demo.php</span> を削除する</li>
+          <li>• <span class="code">docker compose restart php</span> と <span
+              class="code">nginx -s reload</span> で元の設定を反映する</li>
+          <li>• <span class="code">X-Powered-By</span> が再び出る、<span class="code">/.env</span> が 200 に戻るなど、初期状態に戻ったことを確認する</li>
+        </ul>
+        <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <pre class="code text-sm leading-7">rm src/public/.env src/public/info.php src/public/exec-demo.php
+docker compose restart php
+docker compose exec nginx nginx -t
+docker compose exec nginx nginx -s reload</pre>
+        </div>
+        <p class="mt-3 text-sm leading-relaxed text-rose-950">
+          実習を終えるときは <span class="code">docker compose down</span> でコンテナを停止・削除できます。
+          <span class="code">src/vendor/</span> はホスト側に残るため、次回の <span class="code">docker compose up -d</span>
+          では <span class="code">composer install</span> がすぐに終わります。
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-8 bg-slate-950 px-6 py-8 text-center text-sm text-slate-300">
+    設定変更は「編集 → 構文確認 → 反映 → 動作確認 → ログ確認」を1セットにします。
+  </footer>
+</body>
+
+</html>

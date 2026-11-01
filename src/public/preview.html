@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linux + Nginx + PHP-FPM セキュリティ教材</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, .75);
+      backdrop-filter: blur(8px);
+    }
+
+    .shadow-soft {
+      box-shadow: 0 10px 35px rgba(0, 0, 0, .08);
+    }
+
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .pulse-dot {
+      animation: pulseDot 1.4s infinite;
+    }
+
+    @keyframes pulseDot {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: .75;
+      }
+
+      50% {
+        transform: scale(1.45);
+        opacity: 1;
+      }
+    }
+
+    .fade-in {
+      animation: fadeIn .45s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .active-tab {
+      background: #111827;
+      color: white;
+    }
+
+    #timeline .timeline-item {
+      opacity: 1;
+      transform: none;
+    }
+
+    #timeline .pulse-dot {
+      animation: none;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+  <header class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-white">
+    <div class="absolute inset-0 opacity-20">
+      <svg viewBox="0 0 1200 400" class="w-full h-full">
+        <defs>
+          <linearGradient id="heroLine" x1="0" x2="1">
+            <stop offset="0%" stop-color="#38bdf8" />
+            <stop offset="100%" stop-color="#a78bfa" />
+          </linearGradient>
+        </defs>
+        <g fill="none" stroke="url(#heroLine)" stroke-width="2">
+          <path d="M0,280 C180,180 320,340 520,230 S860,120 1200,250" />
+          <path d="M0,320 C200,200 350,380 560,270 S840,180 1200,300" opacity=".55" />
+          <path d="M0,220 C200,150 360,280 520,180 S920,110 1200,180" opacity=".35" />
+        </g>
+      </svg>
+    </div>
+    <div class="relative max-w-7xl mx-auto px-6 py-16 md:py-20">
+      <div class="max-w-4xl">
+        <p class="uppercase tracking-[.28em] text-sky-300 text-xs font-semibold mb-4">Security Lab Lesson</p>
+        <h1 class="text-4xl md:text-5xl font-black leading-tight">
+          <span class="mr-3 inline-block rounded-lg bg-sky-400 px-3 py-1 text-xl align-middle text-slate-950 md:text-2xl">解説</span>
+          Linux + Nginx + PHP-FPM で学ぶ<br>
+          設定ミスと脆弱性検証の切り分け
+        </h1>
+        <p class="mt-6 text-slate-200 text-lg leading-relaxed max-w-3xl">
+          今回の検証では、<span class="font-bold text-amber-300">PHP-FPMワーカーの異常終了</span>と、Nginx設定ミスによる
+          <span class="font-bold text-amber-300">.env の情報漏洩</span> を切り分けて確認しました。
+          この教材では、その流れを時系列で追いながら、
+          「何が危険で、何を直すべきか」を整理します。
+          検証環境の再現にはDockerを使用します。
+        </p>
+
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="#goals"
+            class="px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 transition font-semibold shadow-soft">学習目標へ</a>
+          <a href="lab.html"
+            class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition font-semibold shadow-soft">実習 →</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-10 space-y-10">
+    <nav id="contents" aria-labelledby="contents-title" class="glass rounded-3xl p-6 shadow-soft md:p-8">
+      <h2 id="contents-title" class="text-2xl font-black">目次</h2>
+      <p class="mt-2 text-sm text-slate-600">見出しを選ぶと、各章へ移動できます。</p>
+      <ol class="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <li><a href="#goals" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">1. 学習目標と対策方針</a></li>
+        <li><a href="#architecture" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">2. 登場人物と構成図</a></li>
+        <li><a href="#files" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">3. ファイル構成と公開範囲</a></li>
+        <li><a href="#timeline" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">4. 検証の流れ</a></li>
+        <li><a href="#before-after" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">5. 修正前と修正後</a></li>
+        <li><a href="#nginx-settings" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">6. Webサーバー（Nginx）の設定</a></li>
+        <li><a href="#phpini" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">7. php.iniの設定</a></li>
+        <li><a href="#wordpress" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">8. WordPressの注意点</a></li>
+        <li><a href="#phpmyadmin" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">9. phpMyAdminの注意点</a></li>
+        <li><a href="#web-user" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">10. Webユーザーとアクセス権限</a></li>
+        <li><a href="#form-basics" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">11. Formとファイル送信</a></li>
+        <li><a href="#simulator" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">12. リクエストの挙動イメージ</a></li>
+        <li><a href="#apache" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">13. NginxとApacheの違い</a></li>
+        <li><a href="#versions" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">14. バージョン管理</a></li>
+        <li><a href="#summary" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">15. まとめ</a></li>
+        <li><a href="#quiz" class="block rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700">16. 確認クイズ</a></li>
+      </ol>
+    </nav>
+
+    <section id="goals" class="grid md:grid-cols-3 gap-6">
+      <article class="glass rounded-2xl p-6 shadow-soft">
+        <div class="w-12 h-12 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center text-2xl mb-4">🎯
+        </div>
+        <h2 class="text-xl font-bold mb-3">学習目標</h2>
+        <p class="text-slate-600 leading-relaxed">
+          Nginx のドキュメントルート、PHP-FPM の役割、公開領域と非公開領域の分離を理解する。
+        </p>
+      </article>
+      <article class="glass rounded-2xl p-6 shadow-soft">
+        <div class="w-12 h-12 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center text-2xl mb-4">⚠️
+        </div>
+        <h2 class="text-xl font-bold mb-3">危険なポイント</h2>
+        <p class="text-slate-600 leading-relaxed">
+          <span class="code">src/.env</span> が Web 公開領域にあると、
+          PHPの脆弱性がなくても Nginx がそのまま返してしまう場合がある。
+        </p>
+      </article>
+      <article class="glass rounded-2xl p-6 shadow-soft">
+        <div
+          class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl mb-4">
+          🛡️</div>
+        <h2 class="text-xl font-bold mb-3">対策の考え方</h2>
+        <p class="text-slate-600 leading-relaxed">
+          <span class="code">public</span> を Web 公開ディレクトリに分離し、
+          Nginx に公開すべきファイルだけを見せる設計にする。
+        </p>
+      </article>
+    </section>
+
+    <section id="architecture" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <div class="flex flex-col lg:flex-row gap-8">
+        <div class="lg:w-1/2">
+          <h2 class="text-2xl font-black mb-4">今回の登場人物</h2>
+          <div class="space-y-4">
+            <div class="flex items-start gap-4 bg-slate-50 rounded-2xl p-4">
+              <div class="text-2xl">💻</div>
+              <div>
+                <h3 class="font-bold">Linux ホスト（本番環境）</h3>
+                <p class="text-slate-600 text-sm">NginxやPHP-FPMを実行するWebサーバー。EC2やVMなどが該当する。</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4 bg-slate-50 rounded-2xl p-4">
+              <div class="text-2xl">🧑‍💻</div>
+              <div>
+                <h3 class="font-bold">クライアント</h3>
+                <p class="text-slate-600 text-sm">WindowsやMacのブラウザ、curlからWebサーバーへHTTPリクエストを送る。</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4 bg-slate-50 rounded-2xl p-4">
+              <div class="text-2xl">🌐</div>
+              <div>
+                <h3 class="font-bold">Nginx（Webサーバー）</h3>
+                <p class="text-slate-600 text-sm">HTTPを受け取り、静的ファイルの返却や PHP-FPM への転送を行う。</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4 bg-slate-50 rounded-2xl p-4">
+              <div class="text-2xl">🐘</div>
+              <div>
+                <h3 class="font-bold">PHP-FPM</h3>
+                <p class="text-slate-600 text-sm">PHPスクリプトを処理するワーカー群。異常終了の観測対象。</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4 bg-slate-50 rounded-2xl p-4">
+              <div class="text-2xl">🔐</div>
+              <div>
+                <h3 class="font-bold">.env ファイル</h3>
+                <p class="text-slate-600 text-sm">APIキーやDB接続情報などを置く。公開してはいけない。</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
+            <strong>この教材での検証：</strong>
+            本番環境の構成を手元で安全に再現するため、Dockerを利用しています。
+            実際の本番環境では、Linuxサーバーへ直接構築する場合もあります。
+          </div>
+        </div>
+
+        <div class="lg:w-1/2">
+          <h2 class="text-2xl font-black mb-4">開発環境（Docker）の構成図</h2>
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 overflow-auto">
+            <svg viewBox="0 0 620 390" class="w-full h-auto">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L8,3 L0,6 Z" fill="#334155"></path>
+                </marker>
+              </defs>
+
+              <rect x="15" y="18" width="590" height="354" rx="20" fill="#f8fafc" stroke="#cbd5e1" />
+              <text x="34" y="44" font-size="18" font-weight="700" fill="#0f172a">Dockerによる検証環境</text>
+
+              <rect x="40" y="70" width="150" height="92" rx="16" fill="#dbeafe" stroke="#60a5fa" />
+              <text x="58" y="103" font-size="18" font-weight="700" fill="#1e3a8a">Windows / Mac</text>
+              <text x="58" y="130" font-size="13" fill="#1e40af">http://127.0.0.1:8099</text>
+
+              <rect x="250" y="70" width="140" height="92" rx="16" fill="#ecfeff" stroke="#22d3ee" />
+              <text x="294" y="103" font-size="18" font-weight="700" fill="#155e75">Nginx</text>
+              <text x="276" y="130" font-size="13" fill="#0f766e">静的配信 / FastCGI転送</text>
+
+              <rect x="445" y="70" width="140" height="92" rx="16" fill="#f5f3ff" stroke="#a78bfa" />
+              <text x="475" y="103" font-size="18" font-weight="700" fill="#5b21b6">PHP-FPM</text>
+              <text x="463" y="130" font-size="13" fill="#6d28d9">PHPワーカーが処理</text>
+
+              <rect x="255" y="225" width="145" height="86" rx="16" fill="#fef2f2" stroke="#fb7185" />
+              <text x="286" y="256" font-size="18" font-weight="700" fill="#9f1239">公開領域</text>
+              <text x="287" y="282" font-size="14" fill="#be123c">public/</text>
+
+              <rect x="440" y="225" width="145" height="86" rx="16" fill="#fffbeb" stroke="#f59e0b" />
+              <text x="472" y="256" font-size="18" font-weight="700" fill="#92400e">非公開領域</text>
+              <text x="474" y="282" font-size="14" fill="#b45309">.env / app / config</text>
+
+              <line x1="190" y1="116" x2="250" y2="116" stroke="#334155" stroke-width="3" marker-end="url(#arrow)" />
+              <line x1="390" y1="116" x2="445" y2="116" stroke="#334155" stroke-width="3" marker-end="url(#arrow)" />
+              <line x1="322" y1="162" x2="322" y2="225" stroke="#334155" stroke-width="3" marker-end="url(#arrow)" />
+              <line x1="515" y1="162" x2="515" y2="225" stroke="#334155" stroke-width="3" marker-end="url(#arrow)" />
+
+              <text x="205" y="98" font-size="12" fill="#334155">HTTP</text>
+              <text x="404" y="98" font-size="12" fill="#334155">FastCGI</text>
+
+              <text x="40" y="340" font-size="13" fill="#475569">
+                ポイント：
+              </text>
+              <text x="40" y="362" font-size="13" fill="#475569">
+                Nginx は public だけを見る。 .env は Web から見えてはいけない。
+              </text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8">
+        <h2 class="text-2xl font-black mb-2">一般的な本番環境のフロー</h2>
+        <p class="mb-4 text-sm leading-relaxed text-slate-600">
+          利用者のOSにかかわらず、HTTPSリクエストはLinuxサーバーのNginxへ届きます。
+          Nginxは静的ファイルを返し、PHPの処理だけをPHP-FPMへ転送します。
+        </p>
+        <div class="overflow-auto rounded-2xl border border-slate-200 bg-white p-4">
+          <svg viewBox="0 0 1000 390" class="min-w-[760px] w-full h-auto" role="img" aria-label="一般的なLinux本番環境におけるWebリクエストの流れ">
+            <defs>
+              <marker id="arrowProd" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6 Z" fill="#334155"></path>
+              </marker>
+            </defs>
+
+            <rect x="20" y="120" width="170" height="100" rx="18" fill="#dbeafe" stroke="#60a5fa" />
+            <text x="49" y="156" font-size="18" font-weight="700" fill="#1e3a8a">Windows / Mac</text>
+            <text x="64" y="187" font-size="14" fill="#1e40af">ブラウザ / curl</text>
+
+            <rect x="245" y="30" width="725" height="330" rx="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+            <text x="270" y="62" font-size="19" font-weight="700" fill="#0f172a">Linux本番サーバー（EC2 / VMなど）</text>
+
+            <rect x="300" y="105" width="190" height="105" rx="18" fill="#ecfeff" stroke="#22d3ee" />
+            <text x="360" y="143" font-size="20" font-weight="700" fill="#155e75">Nginx</text>
+            <text x="325" y="176" font-size="14" fill="#0f766e">HTTP受付・静的配信</text>
+
+            <rect x="570" y="105" width="190" height="105" rx="18" fill="#f5f3ff" stroke="#a78bfa" />
+            <text x="615" y="143" font-size="20" font-weight="700" fill="#5b21b6">PHP-FPM</text>
+            <text x="607" y="176" font-size="14" fill="#6d28d9">PHPコードを実行</text>
+
+            <rect x="300" y="265" width="190" height="68" rx="14" fill="#fef2f2" stroke="#fb7185" />
+            <text x="350" y="294" font-size="17" font-weight="700" fill="#9f1239">公開領域</text>
+            <text x="365" y="317" font-size="14" fill="#be123c">public/</text>
+
+            <rect x="570" y="265" width="250" height="68" rx="14" fill="#fffbeb" stroke="#f59e0b" />
+            <text x="648" y="294" font-size="17" font-weight="700" fill="#92400e">非公開領域</text>
+            <text x="623" y="317" font-size="14" fill="#b45309">app / config / .env</text>
+
+            <line x1="190" y1="170" x2="300" y2="170" stroke="#334155" stroke-width="3" marker-end="url(#arrowProd)" />
+            <text x="210" y="151" font-size="13" fill="#334155">HTTPS</text>
+            <line x1="490" y1="158" x2="570" y2="158" stroke="#334155" stroke-width="3" marker-end="url(#arrowProd)" />
+            <text x="502" y="141" font-size="13" fill="#334155">FastCGI</text>
+            <line x1="395" y1="210" x2="395" y2="265" stroke="#334155" stroke-width="3" marker-end="url(#arrowProd)" />
+            <line x1="665" y1="210" x2="665" y2="265" stroke="#334155" stroke-width="3" marker-end="url(#arrowProd)" />
+
+            <rect x="845" y="105" width="95" height="105" rx="18" fill="#ecfdf5" stroke="#34d399" />
+            <text x="873" y="145" font-size="17" font-weight="700" fill="#065f46">DB</text>
+            <text x="861" y="176" font-size="13" fill="#047857">別サーバー</text>
+            <line x1="760" y1="158" x2="845" y2="158" stroke="#334155" stroke-width="3" marker-end="url(#arrowProd)" />
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section id="files" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">ファイル構成と「置いてはいけない」ファイル</h2>
+      <p class="text-slate-600 mb-4">今回追加したファイルと、<span class="code">public/</span> に置くと事故になるファイルを並べて確認します。</p>
+      <div class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm leading-relaxed text-rose-950">
+        <p class="font-bold">これはPHP固有の対策ではなく、Webサーバーの基本設定です。</p>
+        <p class="mt-1">
+          Nginx、Apache、IISなど、使用するWebサーバーやアプリケーション言語にかかわらず、
+          URLから公開する領域（DocumentRoot）を必要最小限に限定し、設定ファイル、秘密情報、ソースコード、
+          バックアップなどを公開領域へ置かないことが基本です。
+        </p>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="bg-slate-950 text-slate-100 rounded-2xl p-5 overflow-auto">
+          <pre class="code text-sm leading-7"><span class="text-slate-400">今回の構成(OK)</span>
+
+Dockerfile
+compose.yaml
+nginx/default.conf      <span class="text-emerald-300">← 対策後：隠しファイル拒否 / index.php のみ実行</span>
+php/php.ini             <span class="text-emerald-300">← 教材用のセキュリティ設定</span>
+docs/                   <span class="text-emerald-300">← 補足資料</span>
+scripts/                <span class="text-emerald-300">← 補助スクリプト(Python)</span>
+src/
+├─ <span class="text-sky-300">public/</span>             <span class="text-emerald-300">← 唯一の公開領域</span>
+│  ├─ index.php
+│  ├─ lab.html / preview.html  <span class="text-emerald-300">← 教材ページ</span>
+│  ├─ images/
+│  ├─ .env.sample      <span class="text-amber-300">← 実習用のダミー値(コピーして .env を作る)</span>
+│  └─ info.php         <span class="text-amber-300">← 実習用(phpinfo。確認後に削除)</span>
+├─ app/                <span class="text-emerald-300">← クラス(非公開)</span>
+│  ├─ Hello.php
+│  ├─ Security.php
+│  ├─ View.php
+│  ├─ views/home.php
+│  ├─ fatal-demo.php   <span class="text-amber-300">← 実習用(?demo=fatal)</span>
+│  └─ upload-demo.php  <span class="text-amber-300">← 実習用(?demo=upload)</span>
+├─ config/config.php   <span class="text-emerald-300">← 設定(非公開)</span>
+├─ vendor/             <span class="text-emerald-300">← Composer(非公開・git管理外)</span>
+├─ composer.json / composer.lock
+├─ .env                <span class="text-emerald-300">← 秘密情報(非公開・git管理外)</span>
+└─ .env.example        <span class="text-emerald-300">← ひな形(値は空)</span></pre>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-rose-200">
+          <h3 class="text-xl font-black text-rose-700 mb-4">❌ public/ に置いてはいけないもの</h3>
+          <ul class="space-y-3 text-slate-700 text-sm">
+            <li><span class="code font-bold">public/.env</span><br><span class="text-slate-600">APIキー・DBパスワードがそのまま URL
+                から取得される。今回の事故の再現例。</span></li>
+            <li><span class="code font-bold">public/.env.sample</span> に実値<br><span
+                class="text-slate-600">ひな形のつもりでも、実際の値を入れると漏洩する。値は必ず空にする。</span></li>
+            <li><span class="code font-bold">public/composer.json / composer.lock / vendor/</span><br><span
+                class="text-slate-600">使用ライブラリとバージョンが分かり、既知脆弱性を狙われる。</span></li>
+            <li><span class="code font-bold">public/.git/</span><br><span class="text-slate-600">ソース全体と履歴が復元される。</span>
+            </li>
+            <li><span class="code font-bold">public/*.sql / *.bak / *.zip / *.log</span><br><span
+                class="text-slate-600">バックアップやダンプの置き忘れ。</span></li>
+            <li><span class="code font-bold">public/info.php (phpinfo)</span><br><span
+                class="text-slate-600">環境情報の露出。既定の nginx では実行されて表示される(対策後は 404)が、置くこと自体がNG。</span></li>
+            <li><span class="code font-bold">public/uploads/*.php</span><br><span
+                class="text-slate-600">アップロード先に実行可能ファイルが置かれるとRCEにつながる。</span></li>
+          </ul>
+          <div class="mt-5 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900 leading-relaxed">
+            対策後の設定では <span class="code">public/.env</span> も dotfile 拒否ルールで <span class="code">403</span> になります。
+            ただしそれは<strong>最後の砦</strong>です。nginx の設定を誤る・リロード漏れ・別サーバへ移行、のどれかで簡単に破れます。
+            「ルールで防げるから置いてよい」ではなく、<strong>そもそも置かない</strong>が正解です。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="timeline" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h2 class="text-2xl font-black">時系列で見る今回の流れ</h2>
+          <p class="text-slate-600 mt-2">
+            検証中に起きたことを順番に並べた調査記録です。
+            「A. CVEの検証で確認できた現象」と「B. 検証中に発見した別の設定ミス」を混同しないために使います。
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+            <span class="px-3 py-1 rounded-full bg-slate-200 text-slate-700">● 共通の前提</span>
+            <span class="px-3 py-1 rounded-full bg-violet-100 text-violet-800">● A. CVE の検証</span>
+            <span class="px-3 py-1 rounded-full bg-amber-100 text-amber-800">● B. CVE とは無関係</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 relative">
+        <div class="absolute left-5 top-0 bottom-0 w-1 bg-slate-200 rounded"></div>
+
+        <div id="timeline" class="space-y-6">
+          <div class="pl-14">
+            <span class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-slate-200 text-slate-700">共通の前提</span>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-slate-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              1</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">Docker 構成を確認</h3>
+              <p class="text-slate-600 mt-2">Nginx コンテナと PHP-FPM コンテナが分離されており、Nginx は 8099 番で公開されていた。</p>
+            </div>
+          </div>
+
+          <div class="pl-14 pt-2">
+            <span
+              class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-violet-100 text-violet-800 border border-violet-300">A.
+              今回の CVE の検証(PoC)</span>
+            <p class="text-xs text-slate-500 mt-1">PHP の挙動を観測する部分。ここで分かるのは「ワーカーが異常終了した」までで、RCE 成功とは別。</p>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-violet-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              2</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">multipart POST で PHP の異常を観測</h3>
+              <p class="text-slate-600 mt-2">
+                <span class="code">Input variables exceeded 1000</span>、
+                <span class="code">Allowed memory size exhausted</span> などを確認。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-violet-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              3</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">PHP-FPM ワーカー異常終了</h3>
+              <p class="text-slate-600 mt-2">
+                ログに <span class="code">child 29 exited with code 70</span> と
+                <span class="code">child 36 started</span> が記録された。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              4</div>
+            <div class="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5">
+              <h3 class="font-bold text-lg text-rose-800">異常終了後の影響を判定</h3>
+              <p class="mt-2 text-rose-950">
+                PHP-FPMの親プロセスは新しいワーカーを起動し、別ワーカーがリクエストを処理できたため、サービス全体は停止しなかった。
+                しかし、外部リクエストでワーカーを異常終了させられる状態は、繰り返されると処理能力を奪う<strong>DoS（サービス妨害）の重大な入口</strong>になる。
+              </p>
+              <p class="mt-2 text-sm text-rose-800">
+                この結果から確認できたのは異常終了と可用性への影響であり、任意コード実行（RCE）の成功までは証明していない。
+              </p>
+            </div>
+          </div>
+
+          <div class="pl-14 pt-2">
+            <span
+              class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300">B.
+              CVE とは無関係の設定ミス(.env の公開)</span>
+            <p class="text-xs text-slate-500 mt-1">検証中に見つかった別の問題。PHP の脆弱性ではなく、Nginx の公開範囲と配置の問題。</p>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              5</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">.env の HTTP 直接取得を確認</h3>
+              <p class="text-slate-600 mt-2">
+                <span class="code">curl.exe -i http://127.0.0.1:8099/.env</span> に対して
+                <span class="code">200 OK</span> が返り、
+                <span class="code">API_KEY=dummy</span> が見えてしまった。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              6</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">Nginx 設定で遮断</h3>
+              <p class="text-slate-600 mt-2">
+                Dotfile を拒否する <span class="code">location</span> を追加後、
+                <span class="code">403 Forbidden</span> を確認。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              7</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">根本対策として public 分離</h3>
+              <p class="text-slate-600 mt-2">
+                Nginx に <span class="code">./src/public</span> だけをマウントし、
+                ドキュメントルートを <span class="code">/var/www/html/public</span> に変更した。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              8</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">あえて public/.env を置いて確認</h3>
+              <p class="text-slate-600 mt-2">
+                古い設定のまま動いていた nginx では <span class="code">public/.env</span> が
+                <span class="code">200 OK</span> で取得できた。<span class="code">nginx -s reload</span> で
+                dotfile 拒否を反映すると <span class="code">403</span> になった。
+                「設定の反映漏れ」でも漏洩する、という実例。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="before-after" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <div class="flex flex-wrap gap-3 mb-6">
+        <button class="tab-btn active-tab px-4 py-2 rounded-xl font-semibold border border-slate-300"
+          data-tab="before">修正前</button>
+        <button class="tab-btn px-4 py-2 rounded-xl font-semibold bg-white border border-slate-300"
+          data-tab="after">修正後</button>
+      </div>
+
+      <div id="tab-before" class="tab-panel fade-in">
+        <div class="grid lg:grid-cols-2 gap-6">
+          <div class="bg-white rounded-2xl p-5 border border-rose-200">
+            <h2 class="text-2xl font-black text-rose-700 mb-4">修正前の問題点</h2>
+            <ul class="space-y-3 text-slate-700">
+              <li>• Nginx が <span class="code">./src</span> 全体を見ていた</li>
+              <li>• ドキュメントルート直下に <span class="code">.env</span> が存在した</li>
+              <li>• <span class="code">try_files $uri ...</span> により存在するファイルがそのまま返された</li>
+              <li>• PHPの脆弱性がなくても機密情報が直接取得できた</li>
+            </ul>
+          </div>
+          <div class="bg-slate-950 text-slate-100 rounded-2xl p-5 overflow-auto">
+            <pre class="code text-sm leading-7"><span class="text-slate-400">compose.yaml</span>
+
+services:
+  php:
+    build: .
+    volumes:
+      - ./src:/var/www/html
+
+  nginx:
+    image: nginx:stable
+    ports:
+      - "8099:80"
+    volumes:
+      - ./src:/var/www/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+</pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-after" class="tab-panel hidden fade-in">
+        <div class="grid lg:grid-cols-2 gap-6">
+          <div class="bg-white rounded-2xl p-5 border border-emerald-200">
+            <h2 class="text-2xl font-black text-emerald-700 mb-4">修正後の考え方</h2>
+            <ul class="space-y-3 text-slate-700">
+              <li>• Nginx には <span class="code">public</span> だけを見せる</li>
+              <li>• <span class="code">.env</span> は公開ディレクトリの外に置く</li>
+              <li>• Dotfile 拒否設定も追加して二重防御にする</li>
+              <li>• PHP-FPM は必要に応じて <span class="code">.env</span> を参照する</li>
+            </ul>
+          </div>
+          <div class="bg-slate-950 text-slate-100 rounded-2xl p-5 overflow-auto">
+            <pre class="code text-sm leading-7"><span class="text-slate-400">compose.yaml</span>
+
+services:
+  php:
+    build: .
+    volumes:
+      - ./src:/var/www/html
+      - ./php/php.ini:/usr/local/etc/php/conf.d/99-security.ini:ro
+
+  composer:            <span class="text-slate-400"># 制限なしの php.ini で Composer を実行</span>
+    build: .
+    profiles: ["tools"]
+    entrypoint: ["composer"]
+    volumes:
+      - ./src:/var/www/html
+
+  nginx:
+    image: nginx:stable
+    ports:
+      - "127.0.0.1:8099:80"
+    volumes:
+      - ./src/public:/var/www/html/public:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="nginx-settings" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-6">Webサーバー（Nginx）の重要設定の読み解き</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <article class="bg-white rounded-2xl p-5 border border-slate-200">
+          <h3 class="font-bold text-lg mb-3">問題になった設定</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7">location / {
+    try_files $uri $uri/ /index.php?$query_string;
+}</pre>
+          </div>
+          <p class="text-slate-600 mt-4 leading-relaxed">
+            この設定そのものが悪いのではありません。
+            ただし、<span class="code">.env</span> のようなファイルが
+            ドキュメントルート内にあると、
+            <span class="code">$uri</span> に一致してそのまま返されます。
+          </p>
+        </article>
+
+        <article class="bg-white rounded-2xl p-5 border border-slate-200">
+          <h3 class="font-bold text-lg mb-3">追加した防御</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7">location ~ /\.(?!well-known(?:/|$)) {
+    deny all;
+}</pre>
+          </div>
+          <p class="text-slate-600 mt-4 leading-relaxed">
+            先頭がドットのファイルへのアクセスを遮断します。
+            ただし、これは補助的な防御です。
+            根本対策は <span class="code">public</span> 分離です。
+          </p>
+        </article>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6 mt-6">
+        <article class="bg-white rounded-2xl p-5 border border-rose-200">
+          <h3 class="font-bold text-lg mb-3">既定の設定：任意の <span class="code">.php</span> が実行される</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7">location ~ \.php$ {
+    fastcgi_pass php:9000;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME <span class="text-rose-300">$document_root$fastcgi_script_name</span>;
+}</pre>
+          </div>
+          <p class="text-slate-600 mt-4 leading-relaxed">
+            URL で指定された <span class="code">.php</span> を、Nginx が php-fpm へそのまま渡します。
+            PHP を動かすための一般的な設定ですが、<strong>DocumentRoot にある .php はすべて実行対象</strong>になります。
+          </p>
+          <ul class="mt-3 space-y-2 text-sm text-slate-600 leading-relaxed">
+            <li>• <span class="code">public/info.php</span>（<span class="code">phpinfo()</span>）が実行され、バージョン・パス・設定値が見える</li>
+            <li>• アップロードされた <span class="code">public/uploads/*.php</span> が実行され、Web シェルになる</li>
+            <li>• 置き忘れたテスト用の <span class="code">.php</span> も実行される</li>
+          </ul>
+          <p class="text-slate-600 text-sm mt-3 leading-relaxed">
+            教材の初期状態は<strong>この設定だけが有効</strong>で、<span class="code">location = /index.php</span> と
+            <span class="code">return 404</span> の設定は、対策用に<strong>コメントアウト</strong>されています（<span class="code">TODO</span>）。
+          </p>
+          <p class="text-slate-600 text-sm mt-3 leading-relaxed">
+            対策では、この設定をコメントアウトしてから右の2つを有効にします。
+            <span class="code">location ~</span>（正規表現）は<strong>先に書いたものが優先</strong>されるため、
+            この設定が残っていると、あとから <span class="code">return 404</span> を有効にしても効きません。
+          </p>
+        </article>
+
+        <article class="bg-white rounded-2xl p-5 border border-emerald-200">
+          <h3 class="font-bold text-lg mb-3">追加した防御：実行するのは <span class="code">index.php</span> だけ</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># 実行するのは front controller の index.php のみ</span>
+location = /index.php {
+    fastcgi_pass php:9000;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME <span class="text-emerald-300">$document_root/index.php</span>;
+}
+
+<span class="text-slate-400"># それ以外の .php は 404</span>
+location ~ \.php$ {
+    return 404;
+}</pre>
+          </div>
+          <p class="text-slate-600 mt-4 leading-relaxed">
+            <span class="code">=</span> の完全一致は正規表現より優先されるため、<span class="code">/index.php</span> だけが PHP として実行されます。
+            <span class="code">SCRIPT_FILENAME</span> も <span class="code">index.php</span> に固定しているので、
+            URL でファイル名を変えて別の <span class="code">.php</span> を動かすことはできません。
+          </p>
+          <p class="text-slate-600 text-sm mt-3 leading-relaxed">
+            ただしこれも補助的な防御です。<span class="code">public</span> に不要な <span class="code">.php</span> を置かず、
+            アップロード先を公開領域の外に置くことが根本対策です。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="phpini" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">php.ini の役割と設定の読み解き</h2>
+      <p class="text-slate-600 mb-6 leading-relaxed">
+        <span class="code">php.ini</span> は PHP 自体の挙動を決める設定ファイルです。
+        Nginx の設定が「どのファイルを外に見せるか」を決めるのに対し、
+        php.ini は「PHP が動いたときに何ができるか」を制限します。
+        つまり、Nginx と php.ini は<strong>別々の防御層</strong>です。
+      </p>
+
+      <div class="grid lg:grid-cols-2 gap-6 mb-6">
+        <article class="bg-white rounded-2xl p-5 border border-slate-200">
+          <h3 class="font-bold text-lg mb-3">どう読み込まれるか</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre
+              class="code text-sm leading-7">php:
+  volumes:
+    - ./php/php.ini:/usr/local/etc/php/conf.d/<span class="text-amber-300">99-security.ini</span>:<span class="text-amber-300">ro</span></pre>
+          </div>
+          <ul class="mt-4 space-y-2 text-slate-600 text-sm leading-relaxed">
+            <li>• 公式イメージには php.ini が無く、<span class="code">conf.d/*.ini</span> が名前順に読み込まれます。</li>
+            <li>• <span class="code">99-</span> と付けて<strong>最後に読ませ</strong>、既定値を上書きします。</li>
+            <li>• <span class="code">:ro</span>(読み取り専用)で、コンテナ内から設定を書き換えられないようにしています。</li>
+            <li>• 反映は <span class="code">php</span> コンテナの再起動後です(<span class="code">docker compose restart php</span>)。
+            </li>
+          </ul>
+        </article>
+
+        <article class="bg-white rounded-2xl p-5 border border-amber-200">
+          <h3 class="font-bold text-lg mb-3">注意:Composer は別サービス</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            <span class="code">open_basedir</span> が <span class="code">/var/www/html:/tmp</span> に限られるため、
+            <span class="code">/usr/bin/composer</span> を読めず、制限付きの <span class="code">php</span> コンテナでは Composer が動きません。
+            そこで php.ini を適用しない <span class="code">composer</span> サービスを別に用意しています。
+          </p>
+          <p class="text-slate-600 text-sm mt-3 leading-relaxed">
+            セキュリティ設定が「実際に効いている」ことの分かりやすい例です。
+          </p>
+        </article>
+      </div>
+
+      <div class="overflow-auto bg-white rounded-2xl border border-slate-200">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-900 text-white">
+            <tr>
+              <th class="px-4 py-3 font-semibold">設定</th>
+              <th class="px-4 py-3 font-semibold">値</th>
+              <th class="px-4 py-3 font-semibold">防ぐもの・意味</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 align-top">
+            <tr class="bg-slate-50">
+              <td colspan="3" class="px-4 py-2 font-bold text-slate-600">情報の露出</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">expose_php</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">レスポンスヘッダ <span class="code">X-Powered-By</span> に PHP のバージョンを出さない。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">display_errors</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">エラー内容(ファイルパス、SQL、設定値)を画面に出さない。<span class="code">log_errors</span> と <span
+                  class="code">error_log</span> でログへ出す。</td>
+            </tr>
+            <tr class="bg-slate-50">
+              <td colspan="3" class="px-4 py-2 font-bold text-slate-600">外部読み込み・ファイルアクセス</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">allow_url_fopen</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">
+                <span class="code">fopen()</span> や <span class="code">file_get_contents()</span> などで、外部 URL
+                をファイルのように開けなくする（SSRFや外部データ取り込みの抑止）。
+                <span class="mt-1 block text-xs text-slate-600">
+                  <span class="code">Off</span> でもローカルファイルの読み書きは禁止されません。
+                  ローカルファイルは <span class="code">open_basedir</span> やファイル権限で許可された範囲内から操作できます。
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">allow_url_include</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">
+                外部 URL の <span class="code">include</span> / <span class="code">require</span> を禁止（リモートファイルインクルード対策）。
+                <span class="mt-1 block text-xs text-slate-600">
+                  <span class="code">Off</span> でもローカルファイルの読み込みは禁止されません。
+                  ローカルファイルは <span class="code">open_basedir</span> で許可された範囲内から読み込めます。
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">open_basedir</td>
+              <td class="px-4 py-3 code">/var/www/html:/tmp</td>
+              <td class="px-4 py-3">PHP が触れるディレクトリを限定。<span class="code">/etc/passwd</span> などを読まれにくくする。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">disable_functions</td>
+              <td class="px-4 py-3 code">exec, system, popen ...</td>
+              <td class="px-4 py-3">OS コマンド実行系の関数を無効化。万一コードを実行されても被害を小さくする。</td>
+            </tr>
+            <tr class="bg-slate-50">
+              <td colspan="3" class="px-4 py-2 font-bold text-slate-600">ストリーム・アップロード</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">phar.readonly / phar.require_hash</td>
+              <td class="px-4 py-3 code">On</td>
+              <td class="px-4 py-3">phar 経由の自動デシリアライズ攻撃を抑える。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">file_uploads</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">アップロード機能を無効化。教材で使うときだけ On にして、サイズ・件数の制限と組み合わせる。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">upload_max_filesize / post_max_size / max_file_uploads</td>
+              <td class="px-4 py-3 code">1M / 2M / 1</td>
+              <td class="px-4 py-3">巨大リクエストによる資源消費を抑える。Nginx の <span class="code">client_max_body_size 2m</span> とそろえる。
+              </td>
+            </tr>
+            <tr class="bg-slate-50">
+              <td colspan="3" class="px-4 py-2 font-bold text-slate-600">資源・DoS 対策</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">max_input_vars</td>
+              <td class="px-4 py-3 code">1000</td>
+              <td class="px-4 py-3">POST の項目数の上限。超えると <span class="code">Input variables exceeded 1000</span>
+                の警告になる(今回のログ)。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">memory_limit / max_execution_time / max_input_time</td>
+              <td class="px-4 py-3 code">128M / 10 / 10</td>
+              <td class="px-4 py-3">メモリと処理時間に上限。超えると <span class="code">Allowed memory size exhausted</span> のように止まる。
+              </td>
+            </tr>
+            <tr class="bg-slate-50">
+              <td colspan="3" class="px-4 py-2 font-bold text-slate-600">セッション</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">session.use_strict_mode / use_only_cookies</td>
+              <td class="px-4 py-3 code">1</td>
+              <td class="px-4 py-3">未発行のセッションIDを受け入れない、URL でのID受け渡しを禁止(セッション固定化対策)。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">session.cookie_httponly / samesite</td>
+              <td class="px-4 py-3 code">1 / Lax</td>
+              <td class="px-4 py-3">JavaScript から Cookie を読めなくする、他サイトからの送信を制限する(XSS、CSRF の被害軽減)。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">session.upload_progress.enabled</td>
+              <td class="px-4 py-3 code">Off</td>
+              <td class="px-4 py-3">アップロード中の進捗をセッションに書き込む機能を止める。<span class="code">file_uploads = Off</span>
+                でも、multipart POST でセッションデータが作られる経路を残さない。</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 code">session.cookie_secure</td>
+              <td class="px-4 py-3 code">0</td>
+              <td class="px-4 py-3">この環境は HTTP のため 0。HTTPS で運用する場合は <strong>1</strong> にする。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6">
+        <h3 class="text-xl font-bold mb-2"><span class="code">memory_limit</span> の通常の目安</h3>
+        <p class="text-slate-600 mb-4 text-sm leading-relaxed">
+          一般的なWebアプリでは <span class="code font-bold">256M</span> を初期値にし、実測したピーク使用量と
+          PHP-FPMの同時実行数から調整します。これは予約量ではなく、<strong>PHPプロセス1つあたりの上限</strong>です。
+        </p>
+        <div class="overflow-auto bg-white rounded-2xl border border-slate-200">
+          <table class="w-full text-sm text-left">
+            <thead class="bg-slate-900 text-white">
+              <tr>
+                <th class="px-4 py-3">用途</th>
+                <th class="px-4 py-3">目安</th>
+                <th class="px-4 py-3">考え方・注意点</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              <tr><td class="px-4 py-3 font-semibold">小規模サイト・軽量API</td><td class="px-4 py-3 code">128M</td><td class="px-4 py-3">処理が単純で、画像加工や大きなデータ集計がない場合。</td></tr>
+              <tr class="bg-sky-50"><td class="px-4 py-3 font-semibold">一般的なWebアプリ</td><td class="px-4 py-3 code font-bold text-sky-800">256M</td><td class="px-4 py-3">迷ったときの無難な初期値。監視結果を見て増減する。</td></tr>
+              <tr><td class="px-4 py-3 font-semibold">WordPress・画像処理・重いバッチ</td><td class="px-4 py-3 code">256M〜512M</td><td class="px-4 py-3">プラグイン数や画像サイズで増える。安易な増量は原因調査の代わりにならない。</td></tr>
+              <tr><td class="px-4 py-3 font-semibold">Composer（CLIのみ）</td><td class="px-4 py-3 code">1G〜2G / -1</td><td class="px-4 py-3">Webリクエストとは分離し、一時的なCLI実行に限定する。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
+          <strong>容量設計:</strong> PHPに使えるメモリを4GB、PHP-FPMの最大プロセス数を20とすると、単純平均は約200MBです。
+          <span class="code">memory_limit = 512M</span> のまま20プロセスが上限近くまで使えば、OSやDBを含めてメモリ不足になる可能性があります。
+          <span class="code">pm.max_children</span> とセットで設計してください。
+        </div>
+      </div>
+
+      <div class="mt-6 rounded-xl bg-sky-50 border border-sky-200 p-4 text-sm text-sky-900 leading-relaxed">
+        <strong>ポイント:</strong>
+        php.ini の制限は、今回の <span class="code">.env</span> 漏洩のような<strong>Nginx が直接返す</strong>ファイルには効きません。
+        Nginx は PHP を通さないからです。だからこそ「公開領域の分離(Nginx)」と「PHP の制限(php.ini)」を両方で行う、多層防御が必要です。
+      </div>
+    </section>
+
+    <section id="wordpress" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">WordPressで特に注意する危険性</h2>
+      <p class="text-slate-600 leading-relaxed">
+        WordPressは一般的なフレームワークのように「公開する <span class="code">public/</span>」と「非公開の設定・アプリコード」を
+        明確に分離した構成ではありません。通常はDocumentRoot直下に、公開用PHP、管理機能、設定ファイル、更新対象のコードが同居します。
+        そのため、<strong>Webサーバー設定、PHPの実行権限、ファイルの書き込み権限の影響範囲が大きい</strong>ことが構造上の注意点です。
+      </p>
+
+      <div class="mt-6 rounded-2xl border-2 border-rose-300 bg-gradient-to-r from-rose-50 to-amber-50 p-5">
+        <p class="text-xs font-black uppercase tracking-[.2em] text-rose-700">この教材での推奨方針</p>
+        <h3 class="mt-2 text-xl font-black text-slate-900">十分なサーバー管理体制がない環境には、WordPressを安易に推奨しない</h3>
+        <p class="mt-3 text-sm leading-relaxed text-slate-700">
+          「画面から簡単に作れる」ことと「安全に継続運用できる」ことは別です。制作会社、フリーランス、プログラミングスクールなどが
+          導入の容易さだけを理由に勧めるケースがありますが、実運用にはOS・Webサーバー・PHP・MySQL・WordPress本体・プラグイン・テーマ・
+          バックアップ・監視・復旧までを継続して管理する責任があります。その担当者、予算、更新手順を用意できない場合は、
+          静的サイトや管理範囲の小さいサービスも検討します。
+        </p>
+      </div>
+
+      <div class="mt-6 grid gap-4 md:grid-cols-3">
+        <article class="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+          <p class="text-xs font-bold uppercase tracking-wider text-rose-700">設定と公開領域が近い</p>
+          <h3 class="mt-2 font-bold"><span class="code">wp-config.php</span></h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-700">
+            DB接続情報や認証用キーを含む設定ファイルがWordPress本体と同じ階層に置かれます。通常はPHPとして実行され内容は表示されませんが、
+            PHP連携の故障、バックアップファイルの放置、Webサーバーの誤設定があると漏洩につながります。
+          </p>
+        </article>
+        <article class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <p class="text-xs font-bold uppercase tracking-wider text-amber-700">管理機能もWeb公開</p>
+          <h3 class="mt-2 font-bold"><span class="code">wp-admin/</span>・<span class="code">wp-login.php</span></h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-700">
+            管理画面とログイン入口が公開URLに存在します。認証を突破されると、投稿だけでなくプラグイン導入やコード変更まで許す構成になり得ます。
+          </p>
+        </article>
+        <article class="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+          <p class="text-xs font-bold uppercase tracking-wider text-violet-700">コードが広く散在</p>
+          <h3 class="mt-2 font-bold"><span class="code">wp-*.php</span>・<span class="code">wp-includes/</span>・<span class="code">wp-content/</span></h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-700">
+            多数の入口ファイル、本体、テーマ、プラグイン、アップロードが公開ツリー内に共存します。個別ファイルの拒否設定だけで守るのは難しく、更新漏れや権限ミスが影響します。
+          </p>
+        </article>
+      </div>
+
+      <div class="mt-6 rounded-2xl bg-slate-950 p-5 text-slate-100 overflow-auto">
+        <pre class="code text-sm leading-7"><span class="text-slate-400">典型的なDocumentRoot直下</span>
+
+index.php
+wp-config.php           <span class="text-rose-300">← DB認証情報・秘密鍵を含む設定</span>
+wp-login.php            <span class="text-amber-300">← 公開されたログイン入口</span>
+wp-admin/               <span class="text-amber-300">← Web管理画面</span>
+wp-includes/            <span class="text-violet-300">← WordPress本体コード</span>
+wp-content/
+├─ plugins/             <span class="text-violet-300">← 外部コード・更新対象</span>
+├─ themes/              <span class="text-violet-300">← 外部コード・編集対象</span>
+└─ uploads/             <span class="text-sky-300">← Webユーザーの書き込み先</span>
+wp-*.php                <span class="text-violet-300">← 複数の公開PHP入口</span></pre>
+      </div>
+
+      <div class="mt-6 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-soft">
+        <div class="flex items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3">
+          <div class="flex items-center gap-2" aria-hidden="true">
+            <span class="h-3 w-3 rounded-full bg-rose-500"></span>
+            <span class="h-3 w-3 rounded-full bg-amber-400"></span>
+            <span class="h-3 w-3 rounded-full bg-emerald-500"></span>
+          </div>
+          <p class="code text-xs text-slate-400">wordpress@production: access-audit</p>
+          <span class="rounded bg-rose-500/20 px-2 py-1 text-xs font-bold text-rose-300">要注意</span>
+        </div>
+        <div class="overflow-auto p-5 code text-sm leading-7 text-slate-200">
+          <p><span class="text-emerald-400">wordpress@production</span>:<span class="text-sky-400">/var/www/html</span>$ <span class="text-white">id www-data</span></p>
+          <p class="text-slate-400">uid=33(www-data) gid=33(www-data) groups=33(www-data)</p>
+
+          <p class="mt-3"><span class="text-emerald-400">wordpress@production</span>:<span class="text-sky-400">/var/www/html</span>$ <span class="text-white">find . -maxdepth 2 -printf '%M %u:%g %p\n'</span></p>
+          <p><span class="text-rose-300">-rw-rw-r-- www-data:www-data ./wp-config.php</span> <span class="text-slate-500"># DB接続情報</span></p>
+          <p><span class="text-rose-300">drwxrwxr-x www-data:www-data ./wp-admin</span> <span class="text-slate-500"># Web管理画面</span></p>
+          <p><span class="text-rose-300">drwxrwxr-x www-data:www-data ./wp-content/plugins</span> <span class="text-slate-500"># PHP追加・更新可能</span></p>
+          <p><span class="text-rose-300">drwxrwxr-x www-data:www-data ./wp-content/themes</span> <span class="text-slate-500"># PHP編集可能</span></p>
+          <p><span class="text-emerald-300">drwxrwxr-x www-data:www-data ./wp-content/uploads</span> <span class="text-slate-500"># 必要な書き込み先</span></p>
+
+          <p class="mt-3"><span class="text-emerald-400">wordpress@production</span>:<span class="text-sky-400">/var/www/html</span>$ <span class="text-white">printf '--- access path ---\n'</span></p>
+          <p><span class="text-amber-300">[browser]</span> /wp-admin/ <span class="text-slate-500">── 管理者認証 ──▶</span> <span class="text-amber-300">[PHP:www-data]</span></p>
+          <p><span class="text-amber-300">[PHP:www-data]</span> <span class="text-slate-500">── download/update ──▶</span> <span class="text-rose-300">plugins・themes・WordPress本体</span></p>
+          <p><span class="text-amber-300">[PHP:www-data]</span> <span class="text-slate-500">── DB credentials ──▶</span> <span class="text-violet-300">MySQL（付与された権限の範囲）</span></p>
+
+          <div class="mt-4 border-l-2 border-rose-500 bg-rose-500/10 px-4 py-3 text-slate-100">
+            <p><span class="font-bold text-rose-300">RISK:</span> 管理者アカウントが侵害され、Webプロセスがコード領域へ書き込める場合、</p>
+            <p class="pl-12">管理画面からの操作がサーバー上のPHPコード改変へ直結する。</p>
+          </div>
+          <div class="mt-3 border-l-2 border-emerald-500 bg-emerald-500/10 px-4 py-3 text-slate-100">
+            <p><span class="font-bold text-emerald-300">SAFER:</span> code=root:root / read-only、uploadsのみwww-dataが書き込み可能、</p>
+            <p class="pl-14">MySQLはWordPress専用ユーザー＋必要最小限の権限。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 overflow-auto bg-white rounded-2xl border border-slate-200">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-rose-900 text-white">
+            <tr><th class="px-4 py-3">主な危険</th><th class="px-4 py-3">起こり得ること</th><th class="px-4 py-3">基本対策</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr><td class="px-4 py-3 font-bold">古い本体・プラグイン・テーマ</td><td class="px-4 py-3">既知の脆弱性を使った侵入、改ざん、情報漏洩。</td><td class="px-4 py-3">不要なものを削除し、検証後すぐ更新。保守されている製品だけを使う。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">管理画面への総当たり</td><td class="px-4 py-3">弱いパスワードや使い回しによるアカウント乗っ取り。</td><td class="px-4 py-3">長く固有なパスワード、MFA、ログイン試行制限。管理者IDを共有しない。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">ファイルアップロード</td><td class="px-4 py-3">偽装ファイルやPHPが置かれ、実行される。</td><td class="px-4 py-3">種類・サイズを検証し、アップロード先でPHPを実行させない。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">過剰な書き込み権限</td><td class="px-4 py-3">侵入後に本体やテーマへバックドアを埋め込まれる。</td><td class="px-4 py-3">Webユーザーの書き込み先を限定し、安易な <span class="code">777</span> を避ける。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">設定・バックアップの公開</td><td class="px-4 py-3"><span class="code">wp-config.php</span> のコピー、SQL、ZIP、ログから認証情報が漏れる。</td><td class="px-4 py-3"><span class="code">wp-config.php</span> は可能ならDocumentRootの1階層上へ。バックアップは公開領域外に置き、Webサーバーでも拒否する。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">Web経由のインストール・更新</td><td class="px-4 py-3">管理画面から外部コードをダウンロードし、サーバー上のPHPを追加・上書きできる。</td><td class="px-4 py-3">本番はデプロイ工程で更新し、Webプロセスからコード領域への書き込みを外す。管理画面のファイル編集も無効化する。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">MySQLへの強い権限</td><td class="px-4 py-3">Webインストーラーや侵害されたWordPressから、DB作成・変更・削除や情報取得を行われる。</td><td class="px-4 py-3">WordPress専用DBユーザーに必要最小限の権限だけを与え、外部公開しない。DB管理ツールを同じ公開領域へ置かない。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">無防備なXML-RPC・REST連携</td><td class="px-4 py-3">不要な入口が総当たりや大量リクエストに悪用される。</td><td class="px-4 py-3">利用状況を確認し、不要な機能は無効化またはレート制限する。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <h3 class="font-bold text-lg mb-3">最低限の運用チェック</h3>
+          <ul class="space-y-2 text-sm leading-relaxed text-slate-700">
+            <li>• 本体・プラグイン・テーマ・PHPをサポート中の版に保つ</li>
+            <li>• 管理者にMFAを設定し、不要なアカウントを削除する</li>
+            <li>• <span class="code">DISALLOW_FILE_EDIT</span> を有効化し、本番では必要に応じて <span class="code">DISALLOW_FILE_MODS</span> も検討する</li>
+            <li>• コードは読み取り専用にし、書き込み先を <span class="code">uploads/</span> など必要箇所へ限定する</li>
+            <li>• MySQLはWordPress専用ユーザーに分離し、管理用権限や外部接続を与えない</li>
+            <li>• 定期バックアップを別の場所へ保存し、復元テストも行う</li>
+            <li>• WAFやアクセスログ、ファイル改ざんを監視する</li>
+          </ul>
+        </article>
+        <article class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <h3 class="font-bold text-lg mb-3"><span class="code">memory_limit</span> を増やす前に</h3>
+          <p class="text-sm leading-relaxed text-slate-700">
+            メモリエラーは、重いプラグイン、巨大画像、無限ループ、過大な検索処理の症状かもしれません。
+            まずログとピーク使用量を確認し、原因を直したうえで必要な分だけ増やします。
+            上限を大きくしても、脆弱性やマルウェアを防ぐ効果はありません。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="phpmyadmin" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">phpMyAdminも公開方法を誤ると危険</h2>
+      <p class="text-slate-600 leading-relaxed">
+        phpMyAdminはブラウザからMySQLを操作できる便利な管理ツールですが、同時に<strong>データベース管理機能をWebへ公開する入口</strong>でもあります。
+        WordPressと同じサーバーへ常設し、誰でも到達できるURLで公開する構成は推奨しません。侵害時の操作範囲はログインしたMySQLユーザーの権限そのものです。
+      </p>
+
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <article class="rounded-2xl border border-rose-200 bg-white p-5">
+          <h3 class="font-bold text-lg text-rose-800">なぜ危険なのか</h3>
+          <ul class="mt-4 space-y-3 text-sm leading-relaxed text-slate-700">
+            <li>• ログイン画面が公開され、ID・パスワードの総当たり対象になる</li>
+            <li>• 古いphpMyAdminや依存ライブラリの脆弱性が、Webから直接狙われる</li>
+            <li>• MySQLのrootや広すぎる権限でログインすると、全DBの閲覧・変更・削除が可能になる</li>
+            <li>• SQL実行、データのインポート・エクスポート、ユーザー管理までブラウザで操作できる</li>
+            <li>• WordPressと同居すると、片方の侵害から設定・認証情報を経由してもう片方へ被害が広がる</li>
+            <li>• 作業後も設置したまま忘れられ、更新されない管理画面になりやすい</li>
+          </ul>
+        </article>
+
+        <article class="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
+          <div class="flex items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3">
+            <div class="flex gap-2" aria-hidden="true">
+              <span class="h-3 w-3 rounded-full bg-rose-500"></span><span class="h-3 w-3 rounded-full bg-amber-400"></span><span class="h-3 w-3 rounded-full bg-emerald-500"></span>
+            </div>
+            <span class="code text-xs text-slate-400">database exposure map</span>
+          </div>
+          <div class="p-5 code text-sm leading-7 text-slate-200 overflow-auto">
+            <p><span class="text-sky-300">Internet</span> ──▶ <span class="text-amber-300">/phpmyadmin/</span></p>
+            <p class="pl-20 text-slate-500">login / SQL / import / export</p>
+            <p><span class="text-amber-300">phpMyAdmin</span> ── credentials ──▶ <span class="text-violet-300">MySQL</span></p>
+            <p class="mt-3 text-rose-300">GRANT ALL ON *.* → 全データベースへ影響</p>
+            <p class="text-emerald-300">限定ユーザー → 対象DB・必要操作だけ</p>
+            <div class="mt-4 border-l-2 border-rose-500 bg-rose-500/10 px-4 py-3">
+              公開URL＋強いDB権限＋更新漏れが重なると、DB全体の漏洩・改ざん・削除につながる。
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="mt-6 overflow-auto rounded-2xl border border-slate-200 bg-white">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-900 text-white"><tr><th class="px-4 py-3">運用方法</th><th class="px-4 py-3">評価</th><th class="px-4 py-3">理由・対策</th></tr></thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr class="bg-rose-50"><td class="px-4 py-3 font-bold">インターネットへ常時公開</td><td class="px-4 py-3 font-bold text-rose-700">非推奨</td><td class="px-4 py-3">URL変更だけでは防御にならない。削除または外部から到達不能にする。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">IP制限・VPN・踏み台経由</td><td class="px-4 py-3 font-bold text-amber-700">条件付き</td><td class="px-4 py-3">到達経路を限定し、HTTPS、追加認証、MFA対応の入口、ログ監視を組み合わせる。</td></tr>
+            <tr class="bg-emerald-50"><td class="px-4 py-3 font-bold">必要時だけローカル起動</td><td class="px-4 py-3 font-bold text-emerald-700">推奨</td><td class="px-4 py-3"><span class="code">127.0.0.1</span> のみにバインドし、SSHトンネルなどで一時的に利用して終了後に停止する。</td></tr>
+            <tr><td class="px-4 py-3 font-bold">DBアカウント</td><td class="px-4 py-3 font-bold text-emerald-700">最小権限</td><td class="px-4 py-3">MySQLのrootを日常利用せず、対象DBと必要な操作だけに限定した個別ユーザーを使う。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
+        <strong>判断基準:</strong> phpMyAdminは「入れれば管理が簡単になるツール」ではなく、強い管理権限をWebへ持ち込むツールです。
+        常設する明確な理由と防御・更新・監視の担当者がいないなら、CLIや一時的な管理経路を選びます。
+      </div>
+    </section>
+
+    <section id="web-user" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">www-data（Webユーザー）のアクセス権限</h2>
+      <p class="text-slate-600 leading-relaxed">
+        PHP-FPMは、Webリクエストから実行するPHPを通常 <span class="code">www-data</span> という一般ユーザーで動かします。
+        管理者の <span class="code">root</span> で動かさず、侵害された場合に操作できる範囲を小さくするためです。
+        この教材ではNginxとPHP-FPMが別コンテナなので、Nginx側の実行ユーザーとは別に考えます。
+      </p>
+
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <article class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h3 class="text-lg font-black">権限の読み方</h3>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-xs leading-6">-rw-r----- 1 root www-data config.php
+drwxr-x--- 2 root www-data app/
+drwxrwx--- 2 www-data www-data storage/</pre>
+          </div>
+          <ul class="mt-4 space-y-2 text-sm leading-relaxed text-slate-600">
+            <li>• 権限は「所有者・グループ・その他」の順に、読み取り <span class="code">r</span>、書き込み <span class="code">w</span>、実行 <span class="code">x</span> を表します。</li>
+            <li>• ディレクトリの <span class="code">x</span> は、その中へ移動してファイルへアクセスする権限です。</li>
+            <li>• PHPコードや設定は原則として読み取り専用にし、書き込みを許可する場所を限定します。</li>
+          </ul>
+        </article>
+
+        <article class="rounded-2xl border border-emerald-200 bg-white p-5">
+          <h3 class="text-lg font-black">最小権限の考え方</h3>
+          <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <pre class="code text-xs leading-6"><span class="text-slate-400"># 実行ユーザーを確認</span>
+docker compose exec php id www-data
+
+<span class="text-slate-400"># ファイルの所有者と権限を確認</span>
+docker compose exec php ls -la /var/www/html</pre>
+          </div>
+          <ul class="mt-4 space-y-2 text-sm leading-relaxed text-slate-600">
+            <li>• ソースコード・設定ファイル：<span class="code">www-data</span> は読めるが、書き換えられない状態にする</li>
+            <li>• アップロード・キャッシュ・ログ：必要なディレクトリだけ書き込み可能にする</li>
+            <li>• <span class="code">.env</span>：PHPから読む必要があっても、公開ディレクトリには置かない</li>
+            <li>• パス全体を <span class="code">chmod 777</span> にして解決しない</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-5">
+        <h3 class="text-lg font-black text-sky-950">EC2・通常のLinuxサーバーでの運用</h3>
+        <p class="mt-2 text-sm leading-relaxed text-sky-950">
+          DockerやKubernetesを使わず、EC2やVMへ直接配置する場合は、コードを配置する
+          <span class="code">deploy</span> ユーザーと、PHPを実行するWebユーザーを分けるのが一般的です。
+          Webユーザーにソースコードの書き換えを許可せず、侵害された場合の被害を限定します。
+        </p>
+
+        <div class="mt-4 grid grid-cols-1 gap-4">
+          <div class="overflow-auto rounded-xl bg-white p-4 text-sm leading-relaxed text-slate-700">
+            <h4 class="font-black text-slate-950">ユーザーの役割</h4>
+            <table class="mt-3 w-full min-w-[520px] text-left text-xs">
+              <thead class="bg-slate-900 text-white">
+                <tr>
+                  <th class="px-3 py-2 font-semibold">ユーザー</th>
+                  <th class="px-3 py-2 font-semibold">主な役割</th>
+                  <th class="px-3 py-2 font-semibold">権限の考え方</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                <tr>
+                  <td class="px-3 py-2 code">ubuntu</td>
+                  <td class="px-3 py-2">OS更新、パッケージ導入、障害調査</td>
+                  <td class="px-3 py-2">EC2の初期管理ユーザー。必要な管理操作のみ <span class="code">sudo</span> を使う</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 code">deploy</td>
+                  <td class="px-3 py-2">SSH接続、コード配置、依存関係の導入、リリース切り替え</td>
+                  <td class="px-3 py-2">アプリ更新に必要な権限だけを持たせる</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2">Webユーザー<br><span class="code">www-data</span> / <span class="code">nginx</span> / <span class="code">apache</span></td>
+                  <td class="px-3 py-2">PHPの実行</td>
+                  <td class="px-3 py-2">コードは読み取りのみ。必要な保存先だけ書き込み可能にする</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 code">root</td>
+                  <td class="px-3 py-2">OSやサービス全体の管理</td>
+                  <td class="px-3 py-2">通常のログインやデプロイには使わない</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="mt-3 text-xs text-slate-600">
+              本番環境では、管理権限を持つ <span class="code">ubuntu</span> と、アプリ更新専用の
+              <span class="code">deploy</span> を分けると、鍵の漏えいや操作ミスによる影響を限定できます。
+            </p>
+          </div>
+
+          <div class="overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <p class="mb-2 text-xs font-bold text-sky-300">所有者と権限の例</p>
+            <pre class="code text-xs leading-6"><span class="text-slate-400"># PHPコード：deployだけが更新できる</span>
+-rw-r----- deploy www-data index.php
+
+<span class="text-slate-400"># 保存領域：Webユーザーも書き込める</span>
+drwxrwx--- deploy www-data storage/
+
+<span class="text-slate-400"># 秘密情報：公開領域外で読み取りを限定</span>
+-rw-r----- deploy www-data .env</pre>
+          </div>
+        </div>
+
+        <p class="mt-4 text-sm leading-relaxed text-sky-950">
+          実際のWebユーザー名は環境で異なります。Ubuntu・Debianでは <span class="code">www-data</span>、
+          Amazon Linuxでは <span class="code">nginx</span> や <span class="code">apache</span> の場合があります。
+          <span class="code">httpd</span> は一般にApacheのサービス・プロセス名であり、ユーザー名には <span class="code">apache</span> が使われます。
+          PHP-FPMのpool設定にある <span class="code">user</span> と <span class="code">group</span> を確認してください。
+        </p>
+      </div>
+
+      <div class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
+        <strong>Docker Desktopでの注意：</strong>
+        Windowsからバインドマウントしたファイルは、Linuxホスト上のファイルと所有者・権限の見え方が異なる場合があります。
+        本番環境では、イメージ作成時の <span class="code">COPY --chown</span> や起動時の設定を使い、実際のコンテナ内で権限を確認します。
+      </div>
+    </section>
+
+    <section id="form-basics" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">Formの基本</h2>
+      <div class="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+        <h3 class="text-lg font-black text-violet-950">multipart/form-data</h3>
+        <p class="mt-2 text-sm leading-relaxed text-violet-950">
+          通常のファイル送信には <span class="code">multipart/form-data</span> を使います。
+          HTMLフォームでは <span class="code">method="post"</span> と
+          <span class="code">enctype="multipart/form-data"</span> を指定します。
+          multipart形式は、通常の入力値とファイル本体を境界（boundary）で区切り、1回のHTTPリクエストで送る形式です。
+          <span class="code">application/x-www-form-urlencoded</span> のままでは、ファイル入力をPHPの
+          <span class="code">$_FILES</span> として送信できません。
+        </p>
+
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+          <div class="overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <p class="mb-2 text-xs font-bold text-violet-300">HTMLフォーム</p>
+            <pre class="code text-xs leading-6">&lt;form
+  action="/?demo=upload"
+  method="post"
+  enctype="multipart/form-data"&gt;
+  &lt;input
+    type="file"
+    name="training_file"
+    required&gt;
+  &lt;button type="submit"&gt;
+    送信
+  &lt;/button&gt;
+&lt;/form&gt;</pre>
+          </div>
+
+          <div class="overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+            <p class="mb-2 text-xs font-bold text-violet-300">curlで同じmultipart POSTを送信</p>
+            <pre class="code text-xs leading-6"><span class="text-slate-400"># PowerShell</span>
+curl.exe -F "training_file=@.\sample.txt" `
+  "http://localhost:8099/?demo=upload"
+
+<span class="text-slate-400"># Linux / macOS</span>
+curl -F "training_file=@./sample.txt" \
+  "http://localhost:8099/?demo=upload"</pre>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
+          <p class="mb-2 text-xs font-bold text-violet-300">boundaryで区切られた送信イメージ</p>
+          <pre class="code text-xs leading-6">POST /?demo=upload HTTP/1.1
+Content-Type: multipart/form-data; boundary=<span class="text-amber-300">----WebKitFormBoundaryABC123</span>
+
+<span class="text-amber-300">------WebKitFormBoundaryABC123</span>
+Content-Disposition: form-data; name="title"
+
+研修資料
+<span class="text-amber-300">------WebKitFormBoundaryABC123</span>
+Content-Disposition: form-data; name="training_file"; filename="sample.txt"
+Content-Type: text/plain
+
+ファイルの内容
+<span class="text-amber-300">------WebKitFormBoundaryABC123--</span></pre>
+          <p class="mt-3 text-xs leading-relaxed text-slate-300">
+            同じboundaryが入力値とファイルを区切り、末尾の <span class="code text-amber-300">--</span> が本文の終わりを示します。
+            boundaryはブラウザや <span class="code">curl -F</span> が自動生成します。
+          </p>
+        </div>
+
+        <h3 class="mt-6 text-lg font-black text-violet-950">$_FILESで受信する</h3>
+        <div class="mt-2 rounded-xl border border-violet-200 bg-white p-4 text-sm leading-relaxed text-slate-700">
+          <p>
+            フォームの <span class="code">name="training_file"</span> が、PHP側の
+            <span class="code">$_FILES['training_file']</span> に対応します。
+            PHPは受信したファイルを一時ファイルに保存するため、ファイル全体をメモリに保持せず扱えます。
+            <span class="code">curl -F</span> はmultipart形式とboundaryを自動生成するため、
+            <span class="code">Content-Type</span> ヘッダーを手作業で指定しないでください。
+          </p>
+          <pre class="code mt-3 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-6 text-slate-100">$upload = $_FILES['training_file'] ?? null;
+
+if ($upload !== null &amp;&amp; $upload['error'] === UPLOAD_ERR_OK) {
+    // PHPの一時アップロードとして受信された
+}</pre>
+          <p class="mt-3">
+            <span class="code">file_uploads=Off</span> では、multipart POSTを送ってもファイルは
+            <span class="code">$_FILES</span> に入りません。<span class="code">On</span> にすると受信できますが、
+            MIMEタイプ、サイズ、保存名、保存場所をサーバー側で検証する必要があります。
+          </p>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
+          <h4 class="font-black">php://inputを使えばメモリ問題を防げる？</h4>
+          <p class="mt-2">
+            <span class="code">php://input</span> は、HTTPリクエスト本文を生のストリームとして読む仕組みです。
+            JSONや
+            <span class="code">application/octet-stream</span> など、multipartではない本文をPHP側で直接読む場合に使います。
+          </p>
+          <p class="mt-3 rounded-lg border border-amber-300 bg-white p-3 font-bold">
+            結論：<span class="code">php://input</span> を使うだけでは、メモリ問題を根本的には防げません。
+            全体を一度に読めばメモリを消費し、分割して読む場合も受信サイズの上限が必要です。
+          </p>
+
+          <div class="mt-4 grid gap-4 lg:grid-cols-2">
+            <div class="overflow-auto rounded-xl border border-rose-200 bg-white p-4">
+              <p class="mb-2 font-bold text-rose-700">全体をメモリへ読む例（大容量には不向き）</p>
+              <pre class="code text-xs leading-6">$data = file_get_contents('php://input');</pre>
+              <p class="mt-2 text-xs text-slate-600">
+                <span class="code">file_get_contents()</span> は本文全体を1つの文字列にするため、
+                ファイルが大きいほどPHPのメモリを消費します。加工やコピーで使用量がさらに増えることもあります。
+              </p>
+            </div>
+
+            <div class="overflow-auto rounded-xl border border-emerald-200 bg-white p-4">
+              <p class="mb-2 font-bold text-emerald-700">分割して処理する例</p>
+              <pre class="code text-xs leading-6">$input = fopen('php://input', 'rb');
+$output = fopen('/tmp/upload.bin', 'wb');
+
+while (!feof($input)) {
+    $chunk = fread($input, 8192);
+    if ($chunk === false) {
+        throw new RuntimeException('read error');
+    }
+    fwrite($output, $chunk);
+}
+
+fclose($input);
+fclose($output);</pre>
+              <p class="mt-2 text-xs text-slate-600">
+                この例では8KBずつ処理するため、ファイル全体をPHPの文字列として保持しません。
+                実運用では、読み込んだ合計サイズを数えて上限を超えたら中止する処理も必要です。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="mt-6 text-lg font-black text-violet-950">アップロード時の対策</h3>
+        <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <ul class="space-y-1 text-sm leading-relaxed text-emerald-950">
+            <li>• Nginxの <span class="code">client_max_body_size</span>、PHPの <span class="code">post_max_size</span>、アプリ側の上限で多層にサイズを制限する</li>
+            <li>• MIMEタイプをサーバー側で確認する</li>
+            <li>• 拡張子と保存名を検証する</li>
+            <li>• ランダムな保存名を使用する</li>
+            <li>• 公開ディレクトリ外へ保存する</li>
+            <li>• アップロードファイルに実行権限を与えない</li>
+            <li>• <span class="code">is_uploaded_file()</span> と <span class="code">move_uploaded_file()</span> を使用する</li>
+          </ul>
+        </div>
+      </div>
+
+    </section>
+
+    <section id="simulator" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <div class="flex flex-col lg:flex-row gap-8">
+        <div class="lg:w-1/2">
+          <h2 class="text-2xl font-black mb-4">リクエストの挙動イメージ</h2>
+          <p class="text-slate-600 mb-6 leading-relaxed">
+            ボタンを押すと、修正前後の処理の流れとログ例を図で確認できます。
+            <strong>説明用の表示であり、実際のHTTP通信やPHP処理は実行していません。</strong>
+            実際の動作確認は「設定変更実習」で行います。
+          </p>
+
+          <div class="flex flex-wrap gap-3 mb-4">
+            <button id="btnLeak"
+              class="px-4 py-3 rounded-xl bg-rose-600 text-white hover:bg-rose-500 transition font-semibold">src/.env公開
+              （旧構成）</button>
+            <button id="btnMultipart"
+              class="px-4 py-3 rounded-xl bg-amber-500 text-white hover:bg-amber-400 transition font-semibold">multipart
+              POST の例を表示</button>
+            <button id="btnPublicEnv"
+              class="px-4 py-3 rounded-xl bg-fuchsia-600 text-white hover:bg-fuchsia-500 transition font-semibold">public/.env
+              誤配置</button>
+            <button id="btnFix"
+              class="px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 transition font-semibold">修正後の構成を表示</button>
+            <button id="btnReset"
+              class="px-4 py-3 rounded-xl bg-slate-700 text-white hover:bg-slate-600 transition font-semibold">リセット</button>
+          </div>
+
+          <div class="bg-slate-950 text-slate-100 rounded-2xl p-4 h-[340px] overflow-auto">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-slate-300">ログ表示例（通信なし）</span>
+              <span id="modeBadge"
+                class="text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30">修正前モード</span>
+            </div>
+            <pre id="logBox" class="code text-sm leading-6 whitespace-pre-wrap">[diagram] ready
+[hint] 表示したいリクエスト例のボタンを押してください。
+[note] 実際の通信は行いません。</pre>
+          </div>
+        </div>
+
+        <div class="lg:w-1/2">
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 overflow-auto">
+            <svg id="simSvg" viewBox="0 0 580 390" class="w-full h-auto">
+              <defs>
+                <marker id="simArrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L8,3 L0,6 Z" fill="#334155"></path>
+                </marker>
+              </defs>
+
+              <rect x="15" y="15" width="550" height="360" rx="18" fill="#f8fafc" stroke="#cbd5e1" />
+              <text x="35" y="42" font-size="20" font-weight="700" fill="#0f172a">アクセスの流れ</text>
+              <text id="scenarioText" x="35" y="64" font-size="12" font-weight="700" fill="#475569">配置場所を選ぶと、公開範囲との関係を表示します。</text>
+
+              <rect x="40" y="80" width="120" height="78" rx="16" fill="#dbeafe" stroke="#60a5fa" />
+              <text x="70" y="113" font-size="18" font-weight="700" fill="#1e3a8a">Client</text>
+              <text x="60" y="137" font-size="12" fill="#1d4ed8">curl / browser</text>
+
+              <rect id="nginxBox" x="225" y="80" width="130" height="78" rx="16" fill="#ecfeff" stroke="#22d3ee" />
+              <text x="265" y="113" font-size="18" font-weight="700" fill="#155e75">Nginx</text>
+              <text x="250" y="137" font-size="12" fill="#0f766e">静的配信 / 振り分け</text>
+
+              <rect id="phpBox" x="420" y="80" width="120" height="78" rx="16" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2" />
+              <text x="448" y="113" font-size="18" font-weight="700" fill="#5b21b6">PHP</text>
+              <text x="444" y="137" font-size="12" fill="#6d28d9">FPM worker</text>
+              <text id="phpStatus" x="390" y="190" font-size="13" font-weight="700" fill="#be123c"></text>
+
+              <rect id="publicBox" x="225" y="235" width="130" height="82" rx="16" fill="#dcfce7" stroke="#4ade80" />
+              <text x="258" y="267" font-size="18" font-weight="700" fill="#166534">public</text>
+              <text x="252" y="290" font-size="12" fill="#15803d">index.php</text>
+
+              <rect id="envBox" x="420" y="235" width="120" height="82" rx="16" fill="#fee2e2" stroke="#fb7185" />
+              <text id="envTitle" x="454" y="267" font-size="18" font-weight="700" fill="#9f1239">.env</text>
+              <text x="438" y="290" font-size="12" fill="#be123c">API_KEY=dummy</text>
+
+              <line id="lineClientNginx" x1="160" y1="118" x2="225" y2="118" stroke="#334155" stroke-width="3"
+                marker-end="url(#simArrow)" />
+              <line id="lineNginxPhp" x1="355" y1="118" x2="420" y2="118" stroke="#334155" stroke-width="3"
+                marker-end="url(#simArrow)" />
+              <line id="lineNginxPublic" x1="290" y1="158" x2="290" y2="235" stroke="#334155" stroke-width="3"
+                marker-end="url(#simArrow)" />
+              <line id="lineNginxEnv" x1="355" y1="150" x2="447" y2="228" stroke="#ef4444" stroke-width="4"
+                marker-end="url(#simArrow)" />
+
+              <text id="statusText" x="35" y="350" font-size="14" fill="#475569">
+                初期状態：修正前。 .env が見えてしまう可能性があります。
+              </text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="apache" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">アクセスの流れ:Nginx + PHP-FPM と Apache + mod_php</h2>
+      <p class="text-slate-600 mb-6 leading-relaxed">
+        PHP を動かす方法は主に2つあります。この教材は左の <strong>Nginx + PHP-FPM</strong> ですが、
+        古い資料や共有サーバでは右の <strong>Apache + mod_php</strong> が今も多く使われています。
+        違いを知っておくと、設定ミスの見つけ方も変わります。
+      </p>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl p-4 border border-cyan-200">
+          <h3 class="font-bold text-lg mb-2 text-cyan-800">Nginx + PHP-FPM(この教材)</h3>
+          <svg viewBox="0 0 560 150" class="w-full h-auto">
+            <defs>
+              <marker id="cmpArrow1" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6 Z" fill="#334155"></path>
+              </marker>
+            </defs>
+            <rect x="10" y="10" width="540" height="130" rx="16" fill="#f8fafc" stroke="#cbd5e1" />
+            <rect x="25" y="60" width="110" height="70" rx="12" fill="#dbeafe" stroke="#60a5fa" />
+            <text x="48" y="101" font-size="16" font-weight="700" fill="#1e3a8a">Client</text>
+
+            <rect x="205" y="60" width="130" height="70" rx="12" fill="#ecfeff" stroke="#22d3ee" />
+            <text x="248" y="101" font-size="16" font-weight="700" fill="#155e75">Nginx</text>
+
+            <rect x="405" y="60" width="130" height="70" rx="12" fill="#f5f3ff" stroke="#a78bfa" />
+            <text x="437" y="101" font-size="16" font-weight="700" fill="#5b21b6">PHP-FPM</text>
+
+            <line x1="135" y1="95" x2="205" y2="95" stroke="#334155" stroke-width="3" marker-end="url(#cmpArrow1)" />
+            <line x1="335" y1="95" x2="405" y2="95" stroke="#334155" stroke-width="3" marker-end="url(#cmpArrow1)" />
+            <text x="150" y="82" font-size="11" fill="#334155">HTTP</text>
+            <text x="343" y="82" font-size="11" fill="#334155">FastCGI</text>
+
+          </svg>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-orange-200">
+          <h3 class="font-bold text-lg mb-2 text-orange-800">Apache + mod_php</h3>
+          <svg viewBox="0 0 560 150" class="w-full h-auto">
+            <defs>
+              <marker id="cmpArrow2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6 Z" fill="#334155"></path>
+              </marker>
+            </defs>
+            <rect x="10" y="10" width="540" height="130" rx="16" fill="#f8fafc" stroke="#cbd5e1" />
+            <rect x="25" y="60" width="110" height="70" rx="12" fill="#dbeafe" stroke="#60a5fa" />
+            <text x="48" y="101" font-size="16" font-weight="700" fill="#1e3a8a">Client</text>
+
+            <rect x="205" y="35" width="330" height="95" rx="14" fill="#fff7ed" stroke="#fb923c" />
+            <text x="222" y="60" font-size="16" font-weight="700" fill="#9a3412">Apache</text>
+            <rect x="222" y="70" width="296" height="50" rx="10" fill="#f5f3ff" stroke="#a78bfa" />
+            <text x="338" y="101" font-size="16" font-weight="700" fill="#5b21b6">mod_php</text>
+
+            <line x1="135" y1="95" x2="205" y2="95" stroke="#334155" stroke-width="3" marker-end="url(#cmpArrow2)" />
+            <text x="150" y="82" font-size="11" fill="#334155">HTTP</text>
+
+          </svg>
+        </div>
+      </div>
+
+      <div class="mt-6 overflow-auto bg-white rounded-2xl border border-slate-200">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-900 text-white">
+            <tr>
+              <th class="px-4 py-3 font-semibold">観点</th>
+              <th class="px-4 py-3 font-semibold">Nginx + PHP-FPM</th>
+              <th class="px-4 py-3 font-semibold">Apache + mod_php</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 align-top">
+            <tr>
+              <td class="px-4 py-3 font-bold">処理の流れ</td>
+              <td class="px-4 py-3">Nginx自身はPHPを実行せず、対象リクエストをFastCGIでPHP-FPMへ転送する</td>
+              <td class="px-4 py-3">Apacheに組み込まれたmod_phpが、転送を挟まずPHPを実行する</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">PHP の実行場所</td>
+              <td class="px-4 py-3">別プロセス(FastCGI で接続)</td>
+              <td class="px-4 py-3">Apache のワーカー内部</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">静的ファイル</td>
+              <td class="px-4 py-3">Nginx が返す(PHP は通らない)</td>
+              <td class="px-4 py-3">Apache が返す(同じプロセスが PHP も抱える)</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold"><span class="code">.env</span> の扱い</td>
+              <td class="px-4 py-3">dotfile 拒否のルールがなければ返す</td>
+              <td class="px-4 py-3">既定で拒否されるのは <span class="code">.ht*</span> のみ。<span class="code">.env</span> は返してしまう
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">実行される .php</td>
+              <td class="px-4 py-3">設定で <span class="code">index.php</span> だけに限定できる</td>
+              <td class="px-4 py-3">既定では DocumentRoot 内の全 <span class="code">.php</span></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">設定の場所</td>
+              <td class="px-4 py-3"><span class="code">php.ini</span> / pool 設定 / <span class="code">default.conf</span>
+              </td>
+              <td class="px-4 py-3"><span class="code">php.ini</span> / <span class="code">php_admin_value</span> /
+                <span class="code">.htaccess</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">ディレクトリ単位の設定</td>
+              <td class="px-4 py-3">Nginxの設定ファイルに記述し、<span class="code">location</span> で転送対象を限定する</td>
+              <td class="px-4 py-3"><span class="code">AllowOverride</span> の設定によっては、<span class="code">.htaccess</span> で上書きされる</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-bold">Docker イメージ</td>
+              <td class="px-4 py-3"><span class="code">php:8.4.26-fpm</span> + <span class="code">nginx</span></td>
+              <td class="px-4 py-3"><span class="code">php:8.4.26-apache</span> 1 コンテナ</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 grid lg:grid-cols-2 gap-6">
+        <article class="bg-white rounded-2xl p-5 border border-slate-200">
+          <h3 class="font-bold text-lg mb-3">mod_php で特に注意すること</h3>
+          <ul class="space-y-2 text-slate-700 text-sm leading-relaxed">
+            <li>• DocumentRoot にアップロードされた <span class="code">.php</span> が、そのまま実行されてしまう</li>
+            <li>• <span class="code">AllowOverride All</span> だと、<span class="code">.htaccess</span> 経由で設定が書き換えられる</li>
+            <li>• 設定を変えたら Apache の reload が必要(Nginx と同じく、反映漏れに注意)</li>
+            <li>• <span class="code">php.ini</span> の制限(<span class="code">open_basedir</span> など)は mod_php でも有効</li>
+          </ul>
+        </article>
+        <article class="bg-white rounded-2xl p-5 border border-emerald-200">
+          <h3 class="font-bold text-lg mb-3">どちらでも変わらない原則</h3>
+          <ul class="space-y-2 text-slate-700 text-sm leading-relaxed">
+            <li>• 機密ファイルは公開領域(DocumentRoot)に置かない</li>
+            <li>• 公開するのは <span class="code">public/</span> だけにする</li>
+            <li>• 拒否ルールは補助で、<strong>そもそも置かない</strong>が基本</li>
+            <li>• PHP のバージョンを保つ(ここは Nginx / Apache 共通)</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="versions" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-2">バージョンを放置する危険性</h2>
+      <p class="text-slate-600 mb-6 leading-relaxed">
+        設定が正しくても、<strong>PHP や OS、ライブラリが古いまま</strong>では守れません。
+        今回の <span class="code">.env</span> 漏洩のような「設定ミス」とは別に、「既知の脆弱性」という問題があります。
+      </p>
+
+      <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-950">
+        <h3 class="font-black text-base mb-2">PHP 5系・7系が長く残った現場の問題</h3>
+        <p>PHP 5系・7系の更新が先送りされた主な理由：</p>
+        <ul class="mt-2 space-y-1">
+          <li>• 古いフレームワークや独自コードが、新しいPHPでは動かない</li>
+          <li>• 改修やテストに必要な費用を確保できない</li>
+          <li>• システムを理解する担当者や仕様書が不足している</li>
+        </ul>
+        <p class="mt-3 font-bold">使い続けることによる問題：</p>
+        <ul class="mt-2 space-y-1">
+          <li>• 動作していても、安全とは限らない</li>
+          <li>• サポート終了後は、PHP本体のセキュリティ修正が提供されない</li>
+          <li>• 放置するほど、将来の移行範囲とリスクが大きくなる</li>
+          <li>• 棚卸し、互換性確認、自動テスト、段階的な移行を継続的な保守として計画する必要がある</li>
+        </ul>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6 mb-6">
+        <article class="bg-white rounded-2xl p-5 border border-rose-200">
+          <div class="text-2xl mb-2">📢</div>
+          <h3 class="font-bold text-lg mb-2">脆弱性は公開される</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            修正版のリリース前後に、脆弱性の内容（CVEやセキュリティ情報）が公開されることがあります。
+            攻撃者は「パッチが出た = 古い版には穴がある」と知ることができ、
+            更新が遅れるほど、狙われやすい状態が長く続きます。
+          </p>
+        </article>
+        <article class="bg-white rounded-2xl p-5 border border-rose-200">
+          <div class="text-2xl mb-2">🤖</div>
+          <h3 class="font-bold text-lg mb-2">自動で探される</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            インターネット上は、バージョンを調べて既知の脆弱性を試す自動スキャンが常に動いています。
+            <span class="code">expose_php = Off</span> はバージョン推測を難しくしますが、
+            古いまま放置してよい理由にはなりません。
+          </p>
+        </article>
+        <article class="bg-white rounded-2xl p-5 border border-rose-200">
+          <div class="text-2xl mb-2">⛔</div>
+          <h3 class="font-bold text-lg mb-2">サポート終了で修正が出ない</h3>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            サポート終了後は、新しい脆弱性が見つかっても修正版が出ません。
+            PHP 8.2 は <strong>2026年12月31日</strong> でセキュリティサポートが終了します。
+            そこから先は、使い続けるほど「直せない穴」が増えます。
+          </p>
+        </article>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <article class="bg-white rounded-2xl p-5 border border-slate-200 lg:col-span-2">
+          <h3 class="font-bold text-lg mb-3">更新が必要な範囲は PHP だけではない</h3>
+          <p class="mb-4 text-sm leading-relaxed text-slate-600">
+            更新対象は同じでも、Dockerではイメージを作り直し、EC2・VMではOS上のパッケージを更新します。
+          </p>
+          <div class="overflow-auto rounded-xl border border-slate-200">
+            <table class="w-full min-w-[780px] text-left text-sm">
+              <thead class="bg-slate-900 text-white">
+                <tr>
+                  <th class="px-4 py-3 font-semibold">更新対象</th>
+                  <th class="px-4 py-3 font-semibold">Docker環境</th>
+                  <th class="px-4 py-3 font-semibold">EC2・VMなどのLinux本番サーバー</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 align-top">
+                <tr>
+                  <td class="px-4 py-3 font-bold">PHP本体</td>
+                  <td class="px-4 py-3"><span class="code">FROM php:8.x-fpm</span> のタグを更新し、イメージを再ビルド</td>
+                  <td class="px-4 py-3">OSのパッケージまたは保守対象リポジトリから更新し、PHP-FPMを再起動</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-bold">OS・システムライブラリ</td>
+                  <td class="px-4 py-3"><span class="code">--pull --no-cache</span> で新しいベースイメージから再ビルド</td>
+                  <td class="px-4 py-3"><span class="code">apt</span> や <span class="code">dnf</span> でセキュリティ更新を適用。必要に応じて再起動</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-bold">Nginx・Apache</td>
+                  <td class="px-4 py-3">新しいイメージをpullし、コンテナを再作成</td>
+                  <td class="px-4 py-3">Webサーバーのパッケージを更新し、構文確認後にreloadまたはrestart</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-bold">Composer依存ライブラリ</td>
+                  <td class="px-4 py-3">Composer用コンテナで <span class="code">composer audit</span> と更新を実行</td>
+                  <td class="px-4 py-3">アプリ配置ディレクトリで <span class="code">composer audit</span> を実行し、テスト後に更新</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-bold">カーネル・ホスト基盤</td>
+                  <td class="px-4 py-3">コンテナではなくDockerホスト側を更新。Docker Engine・OSも保守対象</td>
+                  <td class="px-4 py-3">Linuxカーネル、OpenSSL、SSHなどを更新し、必要ならEC2を再起動</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="bg-white rounded-2xl p-5 border border-emerald-200">
+          <h3 class="font-bold text-lg mb-3">Docker：固定して、定期的に上げる</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># 1. Dockerfile の FROM を修正版へ変更</span>
+<span class="text-slate-400">#    FROM php:8.4.26-fpm</span>
+FROM php:8.4.27-fpm
+
+<span class="text-slate-400"># 2. PHP を再ビルドし、Nginx の新版を取得</span>
+docker compose build --pull --no-cache php
+docker compose pull nginx
+
+<span class="text-slate-400"># 3. 新しいイメージでコンテナを再作成</span>
+docker compose up -d --force-recreate
+
+<span class="text-slate-400"># 4. 適用された PHP バージョンを確認</span>
+docker compose exec php php -v
+
+<span class="text-slate-400"># ライブラリの既知の脆弱性を確認</span>
+docker compose run --rm composer audit
+<span class="text-slate-400"># update は内容を確認し、テストできる状態で実行</span>
+docker compose run --rm composer update</pre>
+          </div>
+          <ul class="mt-4 space-y-2 text-slate-700 text-sm">
+            <li>• 版を固定すると再現性が上がる。その代わり<strong>更新の予定</strong>を決めておく</li>
+            <li>• PHP のリリース情報とサポート期限を定期的に確認する</li>
+            <li>• 更新後はトップページの PHP バージョンと「環境チェック」を見直す</li>
+          </ul>
+        </article>
+
+        <article class="bg-white rounded-2xl p-5 border border-sky-200">
+          <h3 class="font-bold text-lg mb-3">EC2・VM：OSとサービスを更新する</h3>
+          <div class="bg-slate-950 text-slate-100 rounded-xl p-4 overflow-auto">
+            <pre class="code text-sm leading-7"><span class="text-slate-400"># Ubuntuの更新候補を確認</span>
+sudo apt update
+apt list --upgradable
+
+<span class="text-slate-400"># OS・ライブラリを更新</span>
+sudo apt upgrade
+
+<span class="text-slate-400"># 適用されたバージョンを確認</span>
+php -v
+nginx -v
+
+<span class="text-slate-400"># 設定を確認してNginxへ反映</span>
+sudo nginx -t
+sudo systemctl reload nginx
+
+<span class="text-slate-400"># アプリの依存ライブラリを確認</span>
+cd /var/www/app/current
+composer audit</pre>
+          </div>
+          <ul class="mt-4 space-y-2 text-slate-700 text-sm leading-relaxed">
+            <li>• PHP更新後はPHP-FPMを再起動する。サービス名は <span class="code">php8.4-fpm</span> など環境により異なる</li>
+            <li>• カーネルや共有ライブラリの更新では、プロセスまたはEC2自体の再起動が必要になる場合がある</li>
+            <li>• いきなり本番へ適用せず、AMIやスナップショット、ステージング環境、ロールバック手順を用意する</li>
+            <li>• Amazon Linuxでは <span class="code">apt</span> ではなく <span class="code">dnf</span> または <span class="code">yum</span> を使用する</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="mt-6 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900 leading-relaxed">
+        <strong>php.ini や Nginx の設定は、古いバージョンの穴を直しません。</strong>
+        <span class="code">disable_functions</span> や <span class="code">open_basedir</span> は被害を小さくする補助的な防御で、
+        PHP 自体の脆弱性そのものを塞ぐのは、修正版への更新だけです。
+        「設定で守る」と「バージョンを保つ」は、どちらも欠かせません。
+      </div>
+    </section>
+
+    <section id="summary" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-6">教材用まとめ</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <article class="bg-white rounded-2xl p-6 border border-slate-200">
+          <h3 class="font-bold text-lg mb-4">今回の結論</h3>
+          <ul class="space-y-3 text-slate-700">
+            <li>• PHP-FPM ワーカーの異常終了は観測できた</li>
+            <li>• しかし、それだけで RCE 成功とは言えない</li>
+            <li>• 一方で、.env の HTTP 公開は明確な情報漏洩である</li>
+            <li>• 脆弱性検証と設定ミスは、必ず切り分けて考える</li>
+          </ul>
+        </article>
+        <article class="bg-white rounded-2xl p-6 border border-slate-200">
+          <h3 class="font-bold text-lg mb-4">実務でのポイント</h3>
+          <ul class="space-y-3 text-slate-700">
+            <li>• Nginx には公開すべき最小限のファイルだけを見せる</li>
+            <li>• .env や設定ファイルは Web ルート外に置く</li>
+            <li>• Dotfile 拒否設定を追加しておく</li>
+            <li>• ログ観測では「HTTP 200」と「アプリ正常動作」は別だと考える</li>
+            <li>• PHP のバージョンはサポート期限を確認する。<span class="font-bold text-rose-700">PHP 8.2 は
+                2026年12月31日にセキュリティサポート終了</span>(終了後は修正版が出ない)</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="quiz" class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-6">確認クイズ</h2>
+      <div class="space-y-4">
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">
+            <span class="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-xs font-bold mr-2">区分け</span>
+            PHP-FPM ワーカーの異常終了（CVE の検証）と、<span class="code">.env</span> の公開は、同じ種類の問題ですか？
+          </summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            いいえ、別の種類の問題です。
+          </p>
+          <ul class="mt-2 space-y-2 text-slate-600 leading-relaxed text-sm">
+            <li>
+              <strong class="text-violet-800">A. PHP-FPM ワーカーの異常終了：</strong>
+              <span class="code">multipart</span> POST で <span class="code">Input variables exceeded</span> や
+              <span class="code">Allowed memory size exhausted</span> を起こし、ワーカーが異常終了した現象。
+              これは <strong>PHP 本体（CVE）側の挙動</strong>を観測したもので、
+              設定でゼロにはできず、バージョン更新（パッチ適用）で修正される対象です。
+              今回確認できたのは異常終了と可用性への影響までで、任意コード実行（RCE）の成功は証明していません。
+            </li>
+            <li>
+              <strong class="text-amber-800">B. <span class="code">.env</span> の公開：</strong>
+              Nginx の公開範囲（DocumentRoot）とドキュメントルート配置の<strong>設定ミス</strong>で、
+              PHP の脆弱性は使っていません。<span class="code">disable_functions</span>・
+              <span class="code">allow_url_include</span>・任意の <span class="code">.php</span>
+              が実行される設定なども同じ側（アプリ・サーバー設定側）の問題です。
+            </li>
+          </ul>
+          <p class="mt-2 text-slate-600 leading-relaxed text-sm">
+            CVE 側は「バージョンを上げる」、設定側は「設定を見直す」という、対策の方向が異なります。
+            両方を一つの事故として混同すると、パッチを当てただけで「直った」と誤解したり、
+            設定を直しただけで CVE 対応を忘れたりします。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">
+            <span class="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-xs font-bold mr-2">区分け</span>
+            <span class="code">info.php</span>（phpinfo）や <span class="code">exec-demo.php</span> が実行できてしまうのも、
+            PHP の CVE ですか？
+          </summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            いいえ、これも <span class="code">.env</span> と同じ<strong>B. 設定側</strong>の問題です。
+          </p>
+          <ul class="mt-2 space-y-2 text-slate-600 leading-relaxed text-sm">
+            <li>
+              原因は Nginx の <span class="code">location</span> 設定で、<span class="code">index.php</span>
+              だけに限定する設定がコメントアウトされ、任意の <span class="code">.php</span> が php-fpm に渡っていること。
+            </li>
+            <li>
+              <span class="code">exec()</span> が実際に動くかどうかは、さらに <span class="code">php.ini</span> の
+              <span class="code">disable_functions</span> が有効かという<strong>別の設定</strong>に依存します。
+            </li>
+            <li>
+              どちらも PHP 本体のバグ（CVE）ではなく、「どの <span class="code">.php</span> を実行させるか」
+              「どの関数を使わせるか」という<strong>設定・設計の問題</strong>です。バージョンを上げても直りません。
+            </li>
+          </ul>
+          <p class="mt-2 text-slate-600 leading-relaxed text-sm">
+            PHP-FPM ワーカーの異常終了（A）は PHP 自体の挙動、<span class="code">.env</span> の公開や
+            任意の <span class="code">.php</span> の実行（B）は Nginx・php.ini の設定。
+            「何が原因で、どちらの対策（更新 or 設定変更）が必要か」を分けて考えることが大切です。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">try_files は危険な設定ですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            try_files 自体は一般的な設定です。危険なのは、
+            機密ファイルがドキュメントルート内にあり、
+            それを遮断する設計になっていないことです。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">dotfile 拒否ルールがあれば public/.env を置いてもよい？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            いいえ。ルールは補助的な防御です。nginx の設定を変更しても reload しなければ反映されず、
+            実際に今回も古い設定のまま <span class="code">200 OK</span> で取得できました。
+            機密ファイルは公開領域の外に置くのが原則です。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">PHP 8.2 はいつまで使えますか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            セキュリティサポートは <strong>2026年12月31日</strong> までです(バグ修正は 2024年12月で終了済み)。
+            期限後に脆弱性が見つかっても修正版は出ないため、8.3 以降への移行が必要です。
+            この教材の環境は 8.4 で、セキュリティサポートは 2028年12月31日までです。
+            トップページの「環境チェック」にも同じ注意を表示しています。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">public 分離の通称は何ですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            一般には「ドキュメントルートの分離」「Web ルート分離」
+            「公開領域と非公開領域の分離」などと説明されます。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer">info.php（phpinfo）が実行されたのは、Nginx の設定ミスですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            今回の教材の初期状態では、<span class="code">index.php</span> だけに限定する設定がコメントアウトされ、
+            任意の <span class="code">.php</span> を php-fpm に渡す設定だけが有効です。
+            これは「設定ミス」というより、<strong>対策前の初期状態</strong>です。
+            本物のアプリでは、実行する <span class="code">.php</span> を限定するか、
+            不要な <span class="code">.php</span>（<span class="code">phpinfo()</span> など）を置かないことが対策になります。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer"><span class="code">location = /index.php</span> と
+            <span class="code">location ~ \.php$</span> の両方があるとき、どちらが優先されますか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            <span class="code">=</span> の完全一致が、<span class="code">~</span>
+            の正規表現より優先されます。一方、正規表現の <span class="code">location</span>
+            同士では<strong>先に書いたものが優先</strong>されます。
+            任意の <span class="code">.php</span> を実行する <span class="code">location ~ \.php$</span>
+            が先に残っていると、後ろに <span class="code">return 404</span> を書いても効きません。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer"><span class="code">disable_functions</span> を設定すれば、
+            任意の .php が実行されても安全ですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            いいえ。<span class="code">exec()</span> などの危険な関数を無効化できても、
+            実行できる <span class="code">.php</span> そのもの（例えばアップロードされた Web シェル）が
+            ファイル読み書きや別の処理を行うことは防げません。
+            <span class="code">disable_functions</span> は被害を小さくする補助的な防御で、
+            根本対策は「実行する <span class="code">.php</span> を限定する」「余計な <span class="code">.php</span>
+            を置かない」ことです。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer"><span class="code">file_uploads = Off</span> にすれば、
+            <span class="code">session.upload_progress.enabled</span> は On でもよいですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            いいえ。<span class="code">session.upload_progress.enabled</span> は、<span class="code">multipart/form-data</span>
+            の POST を受け取るだけでアップロード進捗用のセッションデータを作る機能です。
+            <span class="code">file_uploads = Off</span> でファイル保存を止めても、この機能自体は別に動くため、
+            セッションへの書き込み経路（セッション悪用の糸口）を残さないために、<span class="code">Off</span> にしておきます。
+          </p>
+        </details>
+
+        <details class="bg-white rounded-2xl p-5 border border-slate-200">
+          <summary class="font-bold cursor-pointer"><span class="code">allow_url_include</span> が On だと、何が危険ですか？</summary>
+          <p class="mt-3 text-slate-600 leading-relaxed">
+            <span class="code">include</span> や <span class="code">require</span> に外部 URL を渡せるようになり、
+            攻撃者が用意したコードをそのまま実行されてしまう可能性があります（リモートファイルインクルード）。
+            教材の初期状態ではこの設定が On になっており、<span class="code">check_php_ini.py</span> でも NG と判定されます。
+            Off にするのが対策です。
+          </p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-6 pb-12">
+    <div
+      class="glass rounded-3xl shadow-soft p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <h2 class="font-black text-xl">授業メッセージ</h2>
+        <p class="text-slate-600 mt-2">
+          脆弱性の話題が出たときほど、設定ミス・設計ミス・実際の攻撃成立条件を落ち着いて分離して考えることが大切です。
+        </p>
+      </div>
+      <a href="#top"
+        class="px-4 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-700 transition">ページ先頭へ</a>
+    </div>
+  </footer>
+
+  <script>
+    const tabBtns = [...document.querySelectorAll('.tab-btn')];
+    const panels = {
+      before: document.getElementById('tab-before'),
+      after: document.getElementById('tab-after')
+    };
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach(b => {
+          b.classList.remove('active-tab');
+          b.classList.add('bg-white');
+        });
+        btn.classList.add('active-tab');
+        btn.classList.remove('bg-white');
+
+        const name = btn.dataset.tab;
+        Object.keys(panels).forEach(key => {
+          panels[key].classList.toggle('hidden', key !== name);
+        });
+      });
+    });
+
+    const logBox = document.getElementById('logBox');
+    const modeBadge = document.getElementById('modeBadge');
+    const btnLeak = document.getElementById('btnLeak');
+    const btnMultipart = document.getElementById('btnMultipart');
+    const btnPublicEnv = document.getElementById('btnPublicEnv');
+    const btnFix = document.getElementById('btnFix');
+    const btnReset = document.getElementById('btnReset');
+
+    const lineNginxEnv = document.getElementById('lineNginxEnv');
+    const lineClientNginx = document.getElementById('lineClientNginx');
+    const lineNginxPublic = document.getElementById('lineNginxPublic');
+    const envBox = document.getElementById('envBox');
+    const publicBox = document.getElementById('publicBox');
+    const nginxBox = document.getElementById('nginxBox');
+    const phpBox = document.getElementById('phpBox');
+    const phpStatus = document.getElementById('phpStatus');
+    const lineNginxPhp = document.getElementById('lineNginxPhp');
+    const statusText = document.getElementById('statusText');
+    const scenarioText = document.getElementById('scenarioText');
+    const envTitle = document.getElementById('envTitle');
+
+    let fixedMode = false;
+    let phpHighlightTimer;
+    let flowHighlightTimer;
+
+    function setLog(text) {
+      logBox.textContent = text;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function resetPhpHighlight() {
+      clearTimeout(phpHighlightTimer);
+      phpBox.setAttribute('fill', '#f5f3ff');
+      phpBox.setAttribute('stroke', '#a78bfa');
+      phpBox.setAttribute('stroke-width', '2');
+      phpBox.style.filter = '';
+      lineNginxPhp.setAttribute('stroke', '#334155');
+      lineNginxPhp.setAttribute('stroke-width', '3');
+      phpStatus.textContent = '';
+    }
+
+    function applyMode() {
+      if (fixedMode) {
+        modeBadge.textContent = '修正後モード';
+        modeBadge.className = 'text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+        lineNginxEnv.setAttribute('stroke', '#94a3b8');
+        lineNginxEnv.setAttribute('opacity', '.2');
+        envBox.setAttribute('fill', '#f8fafc');
+        envBox.setAttribute('stroke', '#cbd5e1');
+        publicBox.setAttribute('fill', '#bbf7d0');
+        publicBox.setAttribute('stroke', '#16a34a');
+        scenarioText.textContent = '修正後：DocumentRoot = public/（src/.env は公開範囲外）';
+        envTitle.textContent = 'src/.env';
+        statusText.textContent = '修正後：Nginx は public だけを公開し、.env には直接アクセスできません。';
+      } else {
+        modeBadge.textContent = '修正前モード';
+        modeBadge.className = 'text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30';
+        lineNginxEnv.setAttribute('stroke', '#ef4444');
+        lineNginxEnv.setAttribute('opacity', '1');
+        envBox.setAttribute('fill', '#fee2e2');
+        envBox.setAttribute('stroke', '#fb7185');
+        publicBox.setAttribute('fill', '#dcfce7');
+        publicBox.setAttribute('stroke', '#4ade80');
+        scenarioText.textContent = '修正前：DocumentRoot = src/（src/.env が公開範囲内）';
+        envTitle.textContent = 'src/.env';
+        statusText.textContent = '修正前：.env がドキュメントルート側に見えてしまう可能性があります。';
+      }
+    }
+
+    function resetVisualHighlights() {
+      clearTimeout(flowHighlightTimer);
+      resetPhpHighlight();
+      lineClientNginx.setAttribute('stroke', '#334155');
+      lineClientNginx.setAttribute('stroke-width', '3');
+      lineNginxPublic.setAttribute('stroke', '#334155');
+      lineNginxPublic.setAttribute('stroke-width', '3');
+      lineNginxEnv.setAttribute('stroke-width', '4');
+      nginxBox.setAttribute('stroke-width', '1');
+      nginxBox.style.filter = '';
+      envBox.setAttribute('stroke-width', '1');
+      envBox.style.filter = '';
+      publicBox.setAttribute('stroke-width', '1');
+      publicBox.style.filter = '';
+      applyMode();
+    }
+
+    btnLeak.addEventListener('click', () => {
+      resetVisualHighlights();
+      lineClientNginx.setAttribute('stroke', '#0ea5e9');
+      lineClientNginx.setAttribute('stroke-width', '6');
+      nginxBox.setAttribute('stroke-width', '5');
+      nginxBox.style.filter = 'drop-shadow(0 0 8px rgba(14, 165, 233, .7))';
+      if (!fixedMode) {
+        scenarioText.textContent = '旧構成：DocumentRoot = src/（src/.env が公開範囲内）';
+        envTitle.textContent = 'src/.env';
+        lineNginxEnv.setAttribute('stroke', '#e11d48');
+        lineNginxEnv.setAttribute('stroke-width', '7');
+        envBox.setAttribute('stroke-width', '6');
+        envBox.style.filter = 'drop-shadow(0 0 10px rgba(225, 29, 72, .75))';
+        statusText.textContent = 'GET /.env：Nginxから.envが直接返される経路を強調表示しています。';
+        setLog(`[request] GET /.env
+[nginx] try_files -> 実ファイル .env を発見
+[response] HTTP/1.1 200 OK
+[body]
+API_KEY=dummy
+
+[result] 設定ミスによる情報漏洩が発生`);
+      } else {
+        scenarioText.textContent = '修正後：DocumentRoot = public/（src/.env は公開範囲外）';
+        envTitle.textContent = 'src/.env';
+        lineNginxEnv.setAttribute('stroke', '#16a34a');
+        lineNginxEnv.setAttribute('stroke-width', '7');
+        lineNginxEnv.setAttribute('opacity', '.45');
+        statusText.textContent = 'GET /.env：修正後は.envへの経路が遮断されます。';
+        setLog(`[request] GET /.env
+[nginx] dotfile ルール or public 分離により遮断
+[response] HTTP/1.1 403 Forbidden
+
+[result] .env の直接取得は防止された`);
+      }
+      flowHighlightTimer = setTimeout(resetVisualHighlights, 3000);
+    });
+
+    btnMultipart.addEventListener('click', () => {
+      resetVisualHighlights();
+      lineClientNginx.setAttribute('stroke', '#f59e0b');
+      lineClientNginx.setAttribute('stroke-width', '6');
+      phpBox.setAttribute('fill', '#ffe4e6');
+      phpBox.setAttribute('stroke', '#e11d48');
+      phpBox.setAttribute('stroke-width', '6');
+      phpBox.style.filter = 'drop-shadow(0 0 10px rgba(225, 29, 72, .75))';
+      lineNginxPhp.setAttribute('stroke', '#f59e0b');
+      lineNginxPhp.setAttribute('stroke-width', '6');
+      phpStatus.textContent = '処理中 → ワーカー異常終了';
+      statusText.textContent = 'multipart POST：NginxからPHP-FPMへ処理が渡る経路を強調表示しています。';
+      phpHighlightTimer = setTimeout(resetVisualHighlights, 3000);
+
+      setLog(`[request] POST /index.php (multipart/form-data)
+[php] Input variables exceeded 1000
+[php] Allowed memory size exhausted
+[fpm] child 29 exited with code 70
+[fpm] child 36 started
+[http] 200 OK (別ワーカー処理の可能性あり)
+
+[result] PHP-FPM ワーカー異常終了は観測された
+[note] ただし、これだけでは RCE 成功とは言えない`);
+    });
+
+    btnPublicEnv.addEventListener('click', () => {
+      resetVisualHighlights();
+      lineClientNginx.setAttribute('stroke', '#c026d3');
+      lineClientNginx.setAttribute('stroke-width', '6');
+      publicBox.setAttribute('stroke', '#c026d3');
+      publicBox.setAttribute('stroke-width', '6');
+      publicBox.style.filter = 'drop-shadow(0 0 10px rgba(192, 38, 211, .7))';
+      envBox.setAttribute('stroke-width', '5');
+      if (!fixedMode) {
+        scenarioText.textContent = '誤配置：DocumentRoot = public/（public/.env が公開範囲内）';
+        envTitle.textContent = 'public/.env';
+        lineNginxEnv.setAttribute('stroke', '#c026d3');
+        lineNginxEnv.setAttribute('stroke-width', '7');
+        envBox.style.filter = 'drop-shadow(0 0 10px rgba(192, 38, 211, .7))';
+        statusText.textContent = 'public/.env：公開領域に置いたファイルが直接返される経路です。';
+        setLog(`[setup] src/public/.env を配置(置いてはいけない)
+[request] GET /.env
+[nginx] dotfile 拒否ルールなし -> 実ファイルを返却
+[response] HTTP/1.1 200 OK
+[body]
+API_KEY=
+DB_HOST=...
+DB_PASSWORD=...
+
+[result] 公開領域に置いた時点で漏洩`);
+      } else {
+        scenarioText.textContent = '誤配置：public/.env はdotfile拒否ルールで遮断';
+        envTitle.textContent = 'public/.env';
+        lineNginxEnv.setAttribute('stroke', '#16a34a');
+        lineNginxEnv.setAttribute('stroke-width', '7');
+        lineNginxEnv.setAttribute('opacity', '.45');
+        statusText.textContent = 'public/.env：ドットファイル拒否ルールで遮断される例です。';
+        setLog(`[setup] src/public/.env を配置(置いてはいけない)
+[request] GET /.env
+[nginx] location ~ /\\.(?!well-known) { deny all; } に一致
+[response] HTTP/1.1 403 Forbidden
+
+[result] 今回は防げた。ただしこれは最後の砦
+[note] 設定の反映漏れ(nginx -s reload 忘れ)や
+       ルール削除で即漏洩する。そもそも置かない`);
+      }
+      flowHighlightTimer = setTimeout(resetVisualHighlights, 3000);
+    });
+
+    btnFix.addEventListener('click', () => {
+      resetVisualHighlights();
+      fixedMode = true;
+      applyMode();
+      scenarioText.textContent = '修正後：DocumentRoot = public/（src/.env は公開範囲外）';
+      envTitle.textContent = 'src/.env';
+      lineNginxPublic.setAttribute('stroke', '#16a34a');
+      lineNginxPublic.setAttribute('stroke-width', '7');
+      publicBox.setAttribute('stroke-width', '6');
+      publicBox.style.filter = 'drop-shadow(0 0 10px rgba(22, 163, 74, .7))';
+      statusText.textContent = '修正後：Nginxが公開するpublicだけを緑色で強調しています。';
+      setLog(`[config] Nginx の volumes を ./src/public のみに変更
+[config] root /var/www/html/public
+[config] dotfile deny を追加
+
+[result] 公開領域と非公開領域が分離された`);
+      flowHighlightTimer = setTimeout(resetVisualHighlights, 3000);
+    });
+
+    btnReset.addEventListener('click', () => {
+      fixedMode = false;
+      resetVisualHighlights();
+      setLog(`[diagram] reset
+[hint] 表示したいリクエスト例のボタンを押してください。
+[note] 実際の通信は行いません。`);
+    });
+
+    applyMode();
+  </script>
+</body>
+
+</html>

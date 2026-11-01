@@ -1,0 +1,43 @@
+services:
+  # 起動時に vendor/ を自動生成する初期化用サービス(完了したら終了する)
+  # php.ini の制限(open_basedir 等)を適用しないため、php.ini はマウントしない
+  composer-install:
+    build: .
+    entrypoint: [ "composer" ]
+    command: [ "install", "--no-interaction", "--prefer-dist" ]
+    volumes:
+      - ./src:/var/www/html
+
+  php:
+    build: .
+    depends_on:
+      composer-install:
+        condition: service_completed_successfully
+    volumes:
+      # /var/www/html は DocumentRoot であり、ここにアプリケーションのソースコードを配置
+      - ./src:/var/www/html
+      # /usr/local/etc/php/conf.d/99-security.ini は php.ini の設定ファイルであり、ここに PHP の設定を配置
+      - ./php/php.ini:/usr/local/etc/php/conf.d/99-security.ini:ro
+
+  # 制限用 php.ini を適用しない Composer 専用(open_basedir 等で composer.phar が動かないため)
+  composer:
+    build: .
+    profiles: [ "tools" ]
+    entrypoint: [ "composer" ]
+    volumes:
+      - ./src:/var/www/html
+
+  nginx:
+    image: nginx:stable
+    ports:
+      - "127.0.0.1:8099:80"
+    volumes:
+      # /var/www/html/public は DocumentRoot であり、ここにアプリケーションの公開ディレクトリを配置
+      # ro は read-only の意味であり、公開ディレクトリを読み取り専用にする
+      - ./src/public:/var/www/html/public:ro
+      # これは非常に危険であり、アプリケーションの全ソースコードが公開、書き込み可能になってしまう
+      # - ./src:/var/www/html 
+      # default.conf は Webサーバ Nginx の設定ファイル
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - php
