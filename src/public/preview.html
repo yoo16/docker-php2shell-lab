@@ -402,12 +402,13 @@ src/
           <h2 class="text-2xl font-black">時系列で見る今回の流れ</h2>
           <p class="text-slate-600 mt-2">
             検証中に起きたことを順番に並べた調査記録です。
-            「A. CVEの検証で確認できた現象」と「B. 検証中に発見した別の設定ミス」を混同しないために使います。
+            「A. CVEの検証で確認できた現象」「B. 検証中に発見した別の設定ミス」「C. アプリのコードミスによる RCE」を混同しないために使います。
           </p>
           <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
             <span class="px-3 py-1 rounded-full bg-slate-200 text-slate-700">● 共通の前提</span>
             <span class="px-3 py-1 rounded-full bg-violet-100 text-violet-800">● A. CVE の検証</span>
             <span class="px-3 py-1 rounded-full bg-amber-100 text-amber-800">● B. CVE とは無関係</span>
+            <span class="px-3 py-1 rounded-full bg-rose-100 text-rose-800">● C. プログラムミスによる RCE</span>
           </div>
         </div>
       </div>
@@ -435,6 +436,12 @@ src/
               class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-violet-100 text-violet-800 border border-violet-300">A.
               今回の CVE の検証(PoC)</span>
             <p class="text-xs text-slate-500 mt-1">PHP の挙動を観測する部分。ここで分かるのは「ワーカーが異常終了した」までで、RCE 成功とは別。</p>
+            <div class="mt-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 leading-relaxed">
+              <strong>ここでの CVE は「PHP プログラム（<span class="code">$_GET</span> / <span class="code">$_POST</span> などを扱うアプリのコード）が動く前」の問題です。</strong>
+              リクエストの解析（multipart のパース、入力変数の処理など）は PHP 本体や C ライブラリが行います。
+              そこに<strong>メモリ破壊（バッファオーバーフロー、Use-After-Free など）</strong>の脆弱性があると、
+              アプリのコードが安全でも、C ライブラリ側で攻撃者の意図した処理が実行される恐れがあります。
+            </div>
           </div>
 
           <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
@@ -476,6 +483,13 @@ src/
               <p class="mt-2 text-sm text-rose-800">
                 この結果から確認できたのは異常終了と可用性への影響であり、任意コード実行（RCE）の成功までは証明していない。
               </p>
+              <figure class="mt-4 rounded-xl bg-white border border-rose-200 p-3">
+                <img src="images/worker-memory-corruption.svg" width="760" height="364" class="w-full h-auto"
+                  alt="ワーカーのメモリ破壊と誤実行のイメージ。正常時は入力がバッファに収まる。範囲外書き込みで戻りアドレスが壊れると、クラッシュ（今回観測）か、攻撃者が選んだコードの実行（RCE・今回は未確認）に分岐する。">
+                <figcaption class="mt-2 text-xs text-slate-600">
+                  概念図です。実際のメモリ配置は環境ごとに異なります。実線は今回観測した経路、破線は「同じ破壊が悪用された場合に起こりうる」経路で、今回は確認していません。
+                </figcaption>
+              </figure>
             </div>
           </div>
 
@@ -537,6 +551,48 @@ src/
                 <span class="code">200 OK</span> で取得できた。<span class="code">nginx -s reload</span> で
                 dotfile 拒否を反映すると <span class="code">403</span> になった。
                 「設定の反映漏れ」でも漏洩する、という実例。
+              </p>
+            </div>
+          </div>
+
+          <div class="pl-14 pt-2">
+            <span
+              class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300">C.
+              CVE 以外の RCE(プログラムミス)</span>
+            <p class="text-xs text-slate-500 mt-1">PHP や C ライブラリに脆弱性がなくても、アプリのコードの書き方次第で RCE は成立する。A とは原因も対策も別。</p>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              9</div>
+            <div class="bg-white rounded-2xl p-5 border border-slate-200">
+              <h3 class="font-bold text-lg">入力値をそのままシェルに渡すコード</h3>
+              <p class="text-slate-600 mt-2">
+                <span class="code">$_GET</span> / <span class="code">$_POST</span> の値を検証せずに
+                <span class="code">system()</span>、<span class="code">exec()</span>、<span class="code">shell_exec()</span>、
+                <span class="code">passthru()</span>、バッククォート、<span class="code">popen()</span> へ渡すと、
+                <span class="code">; id</span> や <span class="code">| cat /etc/passwd</span> のような<strong>OSコマンドインジェクション</strong>で任意のコマンドが実行される。
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-item relative pl-14 opacity-50 transition-all duration-500">
+            <div
+              class="absolute left-[6px] top-2 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center text-sm font-bold pulse-dot">
+              10</div>
+            <div class="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5">
+              <h3 class="font-bold text-lg text-rose-800">その他のコード起因 RCE と対策</h3>
+              <p class="mt-2 text-rose-950">
+                シェル実行のほか、<span class="code">eval()</span> / <span class="code">assert()</span> への入力、
+                <span class="code">unserialize()</span> による不正なオブジェクト注入、
+                <span class="code">include</span> / <span class="code">require</span> に外部入力を使う（LFI/RFI）、
+                アップロードされた <span class="code">.php</span> が公開領域に置かれて実行される、といった実装ミスも RCE になる。
+              </p>
+              <p class="mt-2 text-sm text-rose-800">
+                対策: 危険な関数を使わない／<span class="code">disable_functions</span> で無効化／
+                やむを得ない場合は <span class="code">escapeshellarg()</span> と許可リスト検証／アップロード先を実行不可にする。
+                これらは CVE のパッチ適用(A の対策)では防げないため、コード側での修正が必要。
               </p>
             </div>
           </div>
