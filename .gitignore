@@ -1,3 +1,4 @@
 .env
 /src/vendor/
 php2shellbt.py
+logs/*
