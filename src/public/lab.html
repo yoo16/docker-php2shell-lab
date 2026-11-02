@@ -31,7 +31,8 @@
     <div class="mx-auto max-w-6xl px-6 py-14">
       <p class="text-xs font-bold uppercase tracking-[.25em] text-sky-300">Hands-on Lab</p>
       <h1 class="mt-3 text-3xl font-black md:text-5xl">
-        <span class="mr-3 inline-block rounded-lg bg-emerald-500 px-3 py-1 text-xl align-middle text-slate-950 md:text-2xl">実習</span>
+        <span
+          class="mr-3 inline-block rounded-lg bg-emerald-500 px-3 py-1 text-xl align-middle text-slate-950 md:text-2xl">実習</span>
         Docker で試す PHP・Nginx設定変更実習
       </h1>
       <p class="mt-5 max-w-3xl leading-relaxed text-slate-200">
@@ -83,13 +84,14 @@
           <pre class="code text-sm leading-7">docker compose up -d</pre>
         </div>
         <p class="text-sm text-slate-600"><span class="code">composer-install</span> サービスが <span
-            class="code">src/vendor/</span> を自動生成してから、<span class="code">php</span> と <span
-            class="code">nginx</span> が起動します。</p>
+            class="code">src/vendor/</span> を自動生成してから、<span class="code">php</span> と <span class="code">nginx</span>
+          が起動します。</p>
         <div class="overflow-auto rounded-2xl bg-slate-950 p-4 text-slate-100">
           <pre class="code text-sm leading-7">docker compose ps</pre>
         </div>
         <div class="overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-slate-100">
-          <pre class="code text-xs leading-6">NAME                       IMAGE                  COMMAND                   SERVICE   CREATED          STATUS          PORTS
+          <pre
+            class="code text-xs leading-6">NAME                       IMAGE                  COMMAND                   SERVICE   CREATED          STATUS          PORTS
 docker-php2shell-nginx-1   nginx:stable           "/docker-entrypoint.…"   nginx     25 minutes ago   Up 25 minutes   127.0.0.1:8099->80/tcp
 docker-php2shell-php-1     docker-php2shell-php   "docker-php-entrypoi…"   php       25 minutes ago   Up 25 minutes   9000/tcp</pre>
         </div>
@@ -139,7 +141,8 @@ python scripts/check_php_version.py</pre>
             <pre class="code text-xs leading-6">NG: X-Powered-Byヘッダーが公開されています: PHP/8.4.26（HTTP 200）
 NG: PHP 8.4.26 は最低要件 8.4.27 を満たしていません。</pre>
           </div>
-          <div class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
+          <div
+            class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
             バージョンが公開されていること（<span class="code">NG</span>）と、最低要件（8.4.27）を満たしていないことが分かります。
             <span class="code">curl</span> やブラウザでも、同じ <span class="code">X-Powered-By</span> ヘッダーを確認できます。
           </div>
@@ -217,7 +220,8 @@ DB_USERNAME=root
 DB_PASSWORD=secret
 ----- end -----</pre>
           </div>
-          <div class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
+          <div
+            class="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950">
             <span class="code">curl</span> でも同じことを確認できます。
           </div>
           <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
@@ -234,7 +238,8 @@ curl -i http://127.0.0.1:8099/.env</pre>
             <span class="code">get_env.py</span> は中身まで判定するので、その事故に気づけます）。
           </div>
           <a href="/.env" target="_blank" rel="noopener noreferrer"
-            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">ブラウザで /.env を開く</a>
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">ブラウザで
+            /.env を開く</a>
           <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
             実在するパスワードやAPIキーは置かず、リポジトリに用意されたダミーファイルだけで確認してください。
           </div>
@@ -262,10 +267,11 @@ curl -i http://127.0.0.1:8099/.env</pre>
             コメントアウトされており、<span class="code">public/</span> 内のどの <span class="code">.php</span> も実行できてしまいます。
           </p>
           <a href="/info.php" target="_blank" rel="noopener noreferrer"
-            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">phpinfo() を開く（/info.php）</a>
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">phpinfo()
+            を開く（/info.php）</a>
           <p class="mt-3 text-sm leading-relaxed text-slate-600">
-            PHP のバージョン・読み込まれた設定ファイル・<span class="code">disable_functions</span>・<span
-              class="code">open_basedir</span> などの内部情報が画面に表示されます。
+            PHP のバージョン・読み込まれた設定ファイル・<span class="code">disable_functions</span>・<span class="code">open_basedir</span>
+            などの内部情報が画面に表示されます。
           </p>
         </article>
 
@@ -276,7 +282,8 @@ curl -i http://127.0.0.1:8099/.env</pre>
             コメントアウトされ、<span class="code">exec()</span> が無効化されていません。
           </p>
           <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
-            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec デモを開く（/exec-demo.php）</a>
+            class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec
+            デモを開く（/exec-demo.php）</a>
           <p class="mt-3 text-sm leading-relaxed text-slate-600">
             実行できるコマンドは <span class="code">ls</span> だけに限定していますが、それでも
             DocumentRoot の外（<span class="code">src/</span> 全体）まで一覧できてしまいます。
@@ -289,18 +296,25 @@ curl -i http://127.0.0.1:8099/.env</pre>
           <div class="mt-4 rounded-xl border border-sky-300 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
             <p class="font-bold">ステップ：どのユーザーで実行されているか確認する</p>
             <p class="mt-2">
-              <span class="code">exec デモ</span>の <span class="code">ls -l</span> の結果に <span class="code">root root</span> と出ますが、
+              <span class="code">exec デモ</span>の <span class="code">ls -l</span> の結果に <span class="code">root
+                root</span> と出ますが、
               これは<strong>一覧されたファイルの持ち主</strong>であって、<strong>コマンドを実行したユーザーではありません</strong>。
               実際に実行しているユーザーを、次のコマンドで確認しましょう。
             </p>
             <pre class="code mt-3 rounded-lg bg-slate-900 p-3 text-xs leading-6 text-slate-100"><span class="text-slate-400">$</span> docker compose exec php id www-data
 uid=33(www-data) gid=33(www-data) groups=33(www-data)</pre>
             <p class="mt-2">
-              <span class="code">uid=33(www-data)</span> と表示されます。
-              つまり PHP（＝今回の exec）は <strong>root ではなく <span class="code">www-data</span> として動いて</strong>おり、
-              RCE が成立しても権限は <span class="code">www-data</span> の範囲にとどまります。
-              ソースは <span class="code">root</span> 所有で書き込み権がないため、コードの改ざんもしにくい状態です。
+              <span class="code">uid=33(www-data)</span> と表示されます。この関係を図にすると次のとおりです。
             </p>
+
+            <figure class="mx-auto mt-3 max-w-2xl rounded-xl border border-sky-200 bg-white p-3">
+              <img src="images/rce-privilege-flow.svg" width="760" height="390" class="h-auto w-full"
+                alt="RCE が成立しても www-data 権限に限定され、root 所有・644/755・読み取り専用のソースは改ざんできないことを示すフロー図" />
+              <figcaption class="mt-2 text-xs text-sky-800">
+                RCE が成立しても、実行は <span class="code">www-data</span>、ソースは <span class="code">root</span> 所有かつ
+                読み取り専用のため、被害を小さく抑えられる。
+              </figcaption>
+            </figure>
             <p class="mt-2 text-xs text-sky-800">
               ※ <span class="code">docker exec</span> で直接指定する場合：
               <span class="code">docker exec $(docker compose ps -q php) id www-data</span>
@@ -424,7 +438,8 @@ python scripts/check_php_version.py</pre>
       <div class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-5">
         <h3 class="text-lg font-black text-rose-950">（任意）allow_url_include と disable_functions も対策する</h3>
         <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
-          <pre class="code text-sm leading-7"><span class="text-slate-400"># allow_url_include を Off に変更</span>
+          <pre
+            class="code text-sm leading-7"><span class="text-slate-400"># allow_url_include を Off に変更</span>
 allow_url_include = Off
 
 <span class="text-slate-400"># コメントアウトされている disable_functions の ; を外す</span>
@@ -435,7 +450,8 @@ disable_functions = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,s
 python scripts/check_php_ini.py</pre>
         </div>
         <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
-          class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec デモで再確認する（/exec-demo.php）</a>
+          class="mt-3 inline-block rounded-lg bg-rose-500 px-4 py-2 text-sm font-bold text-white hover:bg-rose-400">exec
+          デモで再確認する（/exec-demo.php）</a>
         <p class="mt-3 text-sm leading-relaxed text-rose-950">
           「exec() は無効化されています」と表示されれば、<span class="code">disable_functions</span> が効いています。
           確認が終わったら <span class="code">src/public/exec-demo.php</span> は削除してください。
@@ -578,15 +594,18 @@ docker compose exec nginx nginx -s reload</pre>
         </div>
         <div class="mt-3 flex flex-wrap gap-3">
           <a href="/info.php" target="_blank" rel="noopener noreferrer"
-            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/info.php を開く（404 になるはず）</a>
+            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/info.php
+            を開く（404 になるはず）</a>
           <a href="/exec-demo.php?cmd=ls&amp;dir=.." target="_blank" rel="noopener noreferrer"
-            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/exec-demo.php を開く（404 になるはず）</a>
+            class="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">/exec-demo.php
+            を開く（404 になるはず）</a>
           <a href="/" target="_blank" rel="noopener noreferrer"
-            class="inline-block rounded-lg bg-white border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">/ を開く（動くことを確認）</a>
+            class="inline-block rounded-lg bg-white border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">/
+            を開く（動くことを確認）</a>
         </div>
         <p class="mt-3 text-sm leading-relaxed text-emerald-950">
-          確認後は、実習用の <span class="code">src/public/info.php</span> と <span
-            class="code">src/public/exec-demo.php</span> を削除してください。
+          確認後は、実習用の <span class="code">src/public/info.php</span> と <span class="code">src/public/exec-demo.php</span>
+          を削除してください。
         </p>
       </div>
     </section>
@@ -662,9 +681,10 @@ python scripts/check_php_version.py</pre>
           <li>• <span class="code">php/php.ini</span> と <span class="code">nginx/default.conf</span> を変更前の状態へ戻す</li>
           <li>• <span class="code">src/public/.env</span>（ダミー）、<span class="code">info.php</span>、<span
               class="code">exec-demo.php</span> を削除する</li>
-          <li>• <span class="code">docker compose restart php</span> と <span
-              class="code">nginx -s reload</span> で元の設定を反映する</li>
-          <li>• <span class="code">X-Powered-By</span> が再び出る、<span class="code">/.env</span> が 200 に戻るなど、初期状態に戻ったことを確認する</li>
+          <li>• <span class="code">docker compose restart php</span> と <span class="code">nginx -s reload</span>
+            で元の設定を反映する</li>
+          <li>• <span class="code">X-Powered-By</span> が再び出る、<span class="code">/.env</span> が 200 に戻るなど、初期状態に戻ったことを確認する
+          </li>
         </ul>
         <div class="mt-3 overflow-auto rounded-xl bg-slate-950 p-4 text-slate-100">
           <pre class="code text-sm leading-7">rm src/public/.env src/public/info.php src/public/exec-demo.php

@@ -265,6 +265,24 @@
           </dd>
         </div>
         <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">ファイルの所有者と権限（<span class="code">644</span> / <span class="code">755</span>）</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Linux の権限は <strong>所有者 / グループ / その他</strong>の3区分で、それぞれに
+            <strong>r（読み取り）・w（書き込み）・x（実行）</strong>がある。
+            <span class="code">root</span> 所有のファイルに対して <span class="code">www-data</span> は「その他」として扱われる。
+            <ul class="mt-2 space-y-1 text-sm">
+              <li>・ファイル <span class="code">644</span>（<span class="code">rw-r--r--</span>）… その他は<strong>読み取りのみ</strong>。PHP や静的ファイルは「読む」だけなので、配信・実行にはこれで足りる。</li>
+              <li>・ディレクトリ <span class="code">755</span>（<span class="code">rwxr-xr-x</span>）… その他に <strong>x（実行＝通過）</strong>が必要。
+                <strong>x が無いとそのディレクトリを辿れず、中のファイルに到達できない</strong>。ディレクトリの x は「中に入るための権限」。</li>
+            </ul>
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ <span class="code">.php</span> に実行ビットは不要（OS が起動するのではなく、インタプリタが中身を読んで実行するため）。
+              ※ <span class="code">666</span> / <span class="code">777</span> のように「その他」に <span class="code">w</span> を与えると
+              <span class="code">www-data</span> に書き込まれてしまうので避ける。書き込みが要るのは一部のディレクトリだけに絞る。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
           <dt class="font-bold text-lg">Web 実行ユーザー（<span class="code">www-data</span> / <span class="code">apache</span>・<span class="code">httpd</span>）</dt>
           <dd class="mt-2 text-slate-600 leading-relaxed">
             Web サーバーや PHP は、人のログインユーザーや <span class="code">root</span> ではなく、
