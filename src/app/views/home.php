@@ -55,20 +55,12 @@ $checks = [
         PHP <?= View::e($phpVersion) ?>
       </p>
       <div class="mt-6 flex flex-wrap gap-3">
-        <a
-          href="/preview.html"
-          target="_blank"
-          class="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2 focus:ring-offset-slate-800">
-          解説
-          <span aria-hidden="true">→</span>
-        </a>
-        <a
-          href="/lab.html"
-          target="_blank"
-          class="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2 focus:ring-offset-slate-800">
-          実習
-          <span aria-hidden="true">→</span>
-        </a>
+        <a href="/preview.html"
+          class="px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 transition font-semibold shadow-soft">解説ページ</a>
+        <a href="/lab.html"
+          class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition font-semibold shadow-soft">実習ページ</a>
+        <a href="/glossary.html"
+          class="px-5 py-3 rounded-xl bg-violet-500 hover:bg-violet-400 transition font-semibold shadow-soft">用語集ページ</a>
       </div>
     </div>
   </header>

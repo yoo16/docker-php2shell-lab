@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用語集 | Linux + Nginx + PHP-FPM セキュリティ教材</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, .75);
+      backdrop-filter: blur(8px);
+    }
+
+    .shadow-soft {
+      box-shadow: 0 10px 35px rgba(0, 0, 0, .08);
+    }
+
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: rgba(15, 23, 42, .06);
+      padding: .05em .35em;
+      border-radius: .3em;
+      font-size: .92em;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+  <header class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-white">
+    <div class="relative max-w-7xl mx-auto px-6 py-14 md:py-16">
+      <p class="uppercase tracking-[.28em] text-sky-300 text-xs font-semibold mb-4">Security Lab Glossary</p>
+      <h1 class="text-3xl md:text-4xl font-black leading-tight">
+        <span class="mr-3 inline-block rounded-lg bg-sky-400 px-3 py-1 text-lg align-middle text-slate-950 md:text-xl">用語集</span>
+        教材に出てくる言葉の意味
+      </h1>
+      <p class="mt-5 text-slate-200 leading-relaxed max-w-3xl">
+        確認クイズや本文で分からない言葉が出てきたら、ここで確認してください。
+        「バージョンを上げて直す問題(CVE)」なのか「設定・設計を直す問題」なのかも合わせて示します。
+      </p>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="preview.html"
+          class="px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 transition font-semibold shadow-soft">解説ページ</a>
+        <a href="lab.html"
+          class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition font-semibold shadow-soft">実習ページ</a>
+        <a href="glossary.html"
+          class="px-5 py-3 rounded-xl bg-violet-500 hover:bg-violet-400 transition font-semibold shadow-soft">用語集ページ</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-10 space-y-6">
+
+    <section class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-5">攻撃・脆弱性に関する言葉</h2>
+      <dl class="space-y-5">
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">PHP2Shell / <span class="code">CVE-2026-109618</span>・<span class="code">CVE-2026-109619</span></dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            この教材が題材にする PHP-FPM のリクエスト解析処理のメモリ破壊脆弱性の総称と、その CVE 番号。
+            細工したリクエストでワーカーを異常終了させられ、条件が揃えば RCE につながりうる。
+            対策はバージョン更新(<span class="code">8.4.26</span>→<span class="code">8.4.27</span>)。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">CVE</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Common Vulnerabilities and Exposures。公開された脆弱性に付けられる世界共通の識別番号。
+            「ソフト本体のバグ」なので、原則<strong>バージョン更新(パッチ)</strong>で直す。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">RCE(リモートコード実行 / リモートシェル実行)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Remote Code Execution。攻撃者が送り込んだコマンドやコードを、遠隔からサーバー上で実行させてしまうこと。
+            成功すると「シェルを取られる」=サーバーを乗っ取られる。PHP 固有ではなく、あらゆる言語・環境で起こりうる。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">メモリ破壊 / バッファオーバーフロー / Use-After-Free</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            プログラムが想定外の場所のメモリを書き換えてしまう不具合。
+            用意されたバッファ(入れ物)を超えて書き込む(オーバーフロー)、
+            解放済みの領域を使い続ける(Use-After-Free)などがあり、クラッシュや RCE の原因になる。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">ヒープ / スタック</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            プログラムが使うメモリの領域。<strong>ヒープ</strong>は実行中に必要なだけ確保・解放する自由な領域、
+            <strong>スタック</strong>は関数呼び出しのたびに積み下ろしする領域。
+            バッファオーバーフローや Use-After-Free は、これらの領域で起きる。
+            どこがどう壊れるかで、クラッシュで済むか悪用されるかが変わる。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">メモリリーク</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            確保したメモリを解放し忘れ、使い終わった領域が少しずつ溜まっていく不具合。
+            長く動かすほどメモリ使用量が増え、やがて枯渇して動作が不安定になる。
+            攻撃者が意図的に誘発できると、可用性を落とす DoS の糸口になりうる。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">OOM(メモリ枯渇 / Out Of Memory)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            使えるメモリを使い切った状態。PHP では
+            <span class="code">Allowed memory size exhausted</span> のようなエラーで止まり、
+            プロセスが異常終了することもある。OS 全体で枯渇すると、OS が
+            <strong>OOM Killer</strong> でプロセスを強制終了する。
+            今回の検証でワーカーが異常終了したのも、過大な入力でメモリを使い切らせたことが一因。
+            可用性(サービスを使い続けられること)を脅かす。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">DoS(サービス妨害)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Denial of Service。サーバーを異常終了・過負荷にさせ、正規利用者がサービスを使えなくする攻撃。
+            この教材ではワーカーの異常終了を繰り返させられる状態が DoS の入口になると説明している。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">PoC(概念実証) / 攻撃スクリプト</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Proof of Concept。脆弱性が本当に存在することを示す検証用コード。
+            公開されていても、環境条件が噛み合わなければ「実行するだけで必ず攻撃成功」とはならない。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Web シェル</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            攻撃者がサーバーに置く、Web 経由でコマンドを実行できる不正なスクリプト。
+            アップロードされた <span class="code">.php</span> が実行できてしまうと設置されやすい。
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-5">サーバー・設定に関する言葉</h2>
+      <dl class="space-y-5">
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">DocumentRoot / 公開領域・非公開領域</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            DocumentRoot は Web サーバーが外部に公開するディレクトリ。
+            この教材では <span class="code">public/</span> だけを公開領域にし、ソースや <span class="code">.env</span> は外(非公開領域)に置くのが対策。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg"><span class="code">.env</span></dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            DB パスワードや API キーなど環境ごとの秘密情報を書く設定ファイル。
+            公開領域に置くと HTTP で直接取得され情報漏洩する。これは設定・配置の問題で、PHP の脆弱性ではない。
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ Web サーバー(Nginx の <span class="code">try_files</span>/<span class="code">location</span> など)で返す設定自体が危険なのではなく、
+              機密ファイルが公開領域<strong>内</strong>に置かれ遮断されていないことが問題。原則は公開領域の外に置く。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">multipart POST(<span class="code">multipart/form-data</span>)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            ファイル添付などに使われるフォーム送信形式。この形式の解析処理に今回の脆弱性があり、
+            細工した multipart POST でワーカーを異常終了させられた。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">パストラバーサル(ディレクトリトラバーサル)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            <span class="code">../</span> などを使って、公開を許していないディレクトリの<strong>外</strong>のファイル
+            (例: <span class="code">/etc/passwd</span>)へアクセスする攻撃。
+            「公開領域の外へ抜け出す」問題で、公開領域<strong>内</strong>の機密ファイルを返してしまう
+            <span class="code">.env</span> 漏洩とは別物。
+            ユーザー入力をそのままファイルパスに使う実装(例: PHP の <span class="code">include($_GET['page'])</span>)や、
+            Web サーバーのパス設定ミスが原因になる。
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ Nginx は照合前に URI を正規化して <span class="code">../</span> を畳むため、素朴な <span class="code">../</span> だけでは外へ出られない。
+              トラバーサルが成立するのは <span class="code">alias</span> の末尾スラッシュ漏れ(off-by-slash)など別の設定ミスと組み合わさったとき。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">OS コマンドインジェクション(シェル実行)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            攻撃者の入力がそのまま OS のコマンドとして実行され、サーバー上で任意のコマンド(シェル)を動かされてしまう攻撃。
+            言語を問わず起こる代表的な脆弱性で、入力をコマンドに組み立てる処理が原因。
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ PHP では <span class="code">exec()</span> / <span class="code">system()</span> / <span class="code">shell_exec()</span> などが該当し、
+              <span class="code">php.ini</span> の <span class="code">disable_functions</span> で無効化するのは補助的な防御。根本は入力を信用しない設計。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">許可リスト(allowlist) / エスケープ</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            インジェクション対策の基本となる2つの考え方。
+            <strong>許可リスト</strong>は「あらかじめ決めた安全な値だけを受け付け、それ以外は拒否する」方式(逆に危険な値を列挙して弾く拒否リストは漏れやすい)。
+            <strong>エスケープ</strong>は、入力をコマンドやクエリに渡す前に特別な意味を持つ文字を無害化すること。
+            共通の原則は<strong>「外部入力をそのまま実行対象に使わない」</strong>。
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ 教材の <span class="code">exec-demo.php</span> は、OS コマンド実行と非公開領域の参照を<strong>実演しつつ、
+              許可リストと <span class="code">escapeshellarg()</span>(エスケープ)で安全に作ってある</strong>例。
+              入力を直接 <span class="code">exec()</span> に渡していれば、そこで初めてコマンドインジェクション(RCE)が成立する。
+              そもそも<strong>こうした <span class="code">.php</span> を公開領域に置かない</strong>のが本来の対策。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">ファイルインクルード(LFI / RFI)</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            プログラムが外部から指定されたファイルを読み込んで実行してしまう脆弱性。
+            サーバー内のファイルを読む <strong>LFI(ローカルファイルインクルード)</strong>、
+            外部 URL のコードを読む <strong>RFI(リモートファイルインクルード)</strong>に分かれる。
+            ユーザー入力をそのまま読み込み先に使う実装が原因で、言語を問わず起こる。
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ PHP では <span class="code">include</span> / <span class="code">require</span> が該当し、
+              <span class="code">php.ini</span> の <span class="code">allow_url_include</span> を Off にすると RFI を防げる。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">セッション / Cookie / PHPSESSID</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            <strong>セッション</strong>は、サーバーが利用者ごとの状態(ログイン状態など)を覚える仕組み。
+            サーバー側にデータを保存し、その識別子(セッション ID)をブラウザに <strong>Cookie</strong> として渡す。
+            PHP ではこの Cookie 名が既定で <span class="code">PHPSESSID</span>。
+            以降ブラウザは毎回この Cookie を送り、サーバーは ID をキーに保存データを取り出す。
+            <span class="block mt-3 font-bold text-slate-700">主なセキュリティ上の注意</span>
+            <ul class="mt-1 space-y-1 text-sm">
+              <li>・<strong>セッションハイジャック(乗っ取り)：</strong>セッション ID を盗まれると、その利用者になりすまされる。</li>
+              <li>・<strong>セッションフィクセーション(固定化)：</strong>攻撃者が用意した ID を使わせ、ログイン後に乗っ取る。ログイン時に ID を再発行して防ぐ。</li>
+              <li>・<strong>Cookie の属性：</strong><span class="code">HttpOnly</span>(JS から読めなくし XSS での盗難を防ぐ)、
+                <span class="code">Secure</span>(HTTPS でのみ送信)、<span class="code">SameSite</span>(別サイトからの送信を制限し CSRF を軽減)を付ける。</li>
+              <li>・<strong>不要な書き込み経路を残さない：</strong>リクエストを受け取るだけでセッションにデータが作られる機能は、使わないなら止める。</li>
+            </ul>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg"><span class="code">phpinfo()</span> / <span class="code">info.php</span></dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            PHP の設定情報を一覧表示する関数とその実習用ファイル。情報が多く攻撃の手がかりになるため、
+            確認後は削除する。公開領域に残すのは危険。
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="glass rounded-3xl shadow-soft p-6 md:p-8">
+      <h2 class="text-2xl font-black mb-5">運用・基盤・ツールに関する言葉</h2>
+      <dl class="space-y-5">
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Linux</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Web サーバーの土台としてよく使われる OS(基本ソフト)。Nginx や PHP-FPM はこの上で動く。
+            ファイルの<strong>所有者・権限</strong>(誰が読み書き・実行できるか)の仕組みがあり、
+            公開ファイルやアップロード先の権限を適切に絞ることがセキュリティの基本になる。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Web サーバー / FastCGI</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            <strong>Web サーバー</strong>はブラウザからの HTTP リクエストを受け取り、ファイルを返したりプログラムの実行を仲介したりするソフト(Nginx・Apache など)。
+            <strong>FastCGI</strong> は Web サーバーと PHP などのプログラム実行役(PHP-FPM)をつなぐ取り決め。
+            Nginx が <span class="code">.php</span> を受けると、FastCGI 経由で PHP-FPM に処理を渡す。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Nginx</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            軽量で高速な Web サーバー。リクエストの振り分け(どの URL をどう処理するか)を設定で細かく決める。
+            PHP は自分で実行せず、FastCGI で PHP-FPM に渡す構成が一般的。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Apache</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            歴史の長い代表的な Web サーバー。PHP を内部のモジュールとして自分で実行できる構成が使え、
+            ディレクトリごとに <span class="code">.htaccess</span> で設定を上書きできるのが特徴。
+            Nginx が「中央の設定ファイルでまとめて制御」なのに対し、Apache は「各所で柔軟に上書き」できる点が対照的。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">PHP-FPM</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            PHP を実行する常駐プロセス(FastCGI Process Manager)。Web サーバーから <span class="code">.php</span> の処理を受け取り、
+            複数のワーカーで並行処理する。今回の CVE はこの解析処理にあった。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Docker / Docker Compose</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            アプリと実行環境をコンテナとしてまとめ、同じ状態を再現する仕組み。
+            Compose は複数コンテナ(Nginx・PHP-FPM など)をまとめて起動する。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Composer</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            PHP の依存ライブラリ管理ツール。<span class="code">composer install</span> で <span class="code">vendor/</span> を生成する。
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">パッチ適用 / バージョン更新</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            脆弱性が修正された新しいバージョンに上げること。CVE 由来の問題は、設定変更ではなくこれでしか根本的に塞げない。
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <div class="pt-2 flex flex-wrap gap-3">
+      <a href="preview.html"
+        class="px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 transition font-semibold text-white shadow-soft">解説ページ</a>
+      <a href="lab.html"
+        class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition font-semibold text-white shadow-soft">実習ページ</a>
+      <a href="glossary.html"
+        class="px-5 py-3 rounded-xl bg-violet-500 hover:bg-violet-400 transition font-semibold text-white shadow-soft">用語集ページ</a>
+    </div>
+
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-6 pb-12 pt-4 text-sm text-slate-500">
+    Linux + Nginx + PHP-FPM セキュリティ教材 — 用語集
+  </footer>
+</body>
+
+</html>
