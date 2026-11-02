@@ -285,6 +285,27 @@ curl -i http://127.0.0.1:8099/.env</pre>
             <span class="code">exec-demo.php</span> と <span class="code">info.php</span> は教材専用です。
             確認後は <span class="code">src/public/</span> から削除してください。
           </div>
+
+          <div class="mt-4 rounded-xl border border-sky-300 bg-sky-50 p-4 text-sm leading-relaxed text-sky-950">
+            <p class="font-bold">ステップ：どのユーザーで実行されているか確認する</p>
+            <p class="mt-2">
+              <span class="code">exec デモ</span>の <span class="code">ls -l</span> の結果に <span class="code">root root</span> と出ますが、
+              これは<strong>一覧されたファイルの持ち主</strong>であって、<strong>コマンドを実行したユーザーではありません</strong>。
+              実際に実行しているユーザーを、次のコマンドで確認しましょう。
+            </p>
+            <pre class="code mt-3 rounded-lg bg-slate-900 p-3 text-xs leading-6 text-slate-100"><span class="text-slate-400">$</span> docker compose exec php id www-data
+uid=33(www-data) gid=33(www-data) groups=33(www-data)</pre>
+            <p class="mt-2">
+              <span class="code">uid=33(www-data)</span> と表示されます。
+              つまり PHP（＝今回の exec）は <strong>root ではなく <span class="code">www-data</span> として動いて</strong>おり、
+              RCE が成立しても権限は <span class="code">www-data</span> の範囲にとどまります。
+              ソースは <span class="code">root</span> 所有で書き込み権がないため、コードの改ざんもしにくい状態です。
+            </p>
+            <p class="mt-2 text-xs text-sky-800">
+              ※ <span class="code">docker exec</span> で直接指定する場合：
+              <span class="code">docker exec $(docker compose ps -q php) id www-data</span>
+            </p>
+          </div>
         </article>
       </div>
 

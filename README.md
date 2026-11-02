@@ -65,6 +65,23 @@ docker compose --profile tools run --rm composer update
 | `/lab.html` | 実習ページ |
 | `/glossary.html` | 用語集ページ |
 
+## 実行ユーザーの確認（RCE の権限）
+
+`exec-demo.php` などで PHP が実行される際のユーザーを確認します。
+RCE が成立しても root ではなく `www-data`（UID 33）で動くことを確認できます。
+
+```bash
+# www-data の uid/gid を確認（docker compose 経由）
+docker compose exec php id www-data
+
+# docker exec で直接指定する場合（コンテナ名は docker compose ps で確認）
+docker exec docker-php2shell-lab-php-1 id www-data
+# → uid=33(www-data) gid=33(www-data) groups=33(www-data)
+```
+
+> 補足: `exec-demo.php` の `ls -l` に出る `root root` は、一覧されたファイルの所有者であって、
+> コマンドを実行したユーザーではありません。実行ユーザーは PHP-FPM ワーカーの `www-data` です。
+
 ## 確認用スクリプト（scripts/）
 
 ```bash

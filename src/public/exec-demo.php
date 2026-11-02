@@ -6,15 +6,19 @@ declare(strict_types=1);
 // 教材専用: public/ に置かれた .php が GET パラメータでコマンドを実行してしまう例
 //
 // - 127.0.0.1 で動く教材用環境でのみ使うこと。
-// - 安全のため、実行できるのは ls だけ。cmd と dir は許可リストの値のみ受け付ける。
+// - 安全のため、実行できるのは ls / id / whoami だけ。cmd と dir は許可リストの値のみ受け付ける。
 // - php.ini の disable_functions に exec が含まれている間は、実行されない（防御が効いている）。
 // ============================================================
 
-// 許可リスト: 実行できるコマンドと、ls に渡せるオプション
+// 許可リスト: 実行できるコマンド（ラベル => 実行コマンドを組み立てる関数）
+// 利用者の入力文字列はコマンドに渡さず、ここで決めた値だけを使う。
+// $dir は escapeshellarg でエスケープ済みの値が渡る（ls 系のみ使用）。
 $commands = [
-    'ls'     => '',
-    'ls -l'  => '-l',
-    'ls -la' => '-la',
+    'ls'     => static fn (string $dir): string => 'ls ' . $dir,
+    'ls -l'  => static fn (string $dir): string => 'ls -l ' . $dir,
+    'ls -la' => static fn (string $dir): string => 'ls -la ' . $dir,
+    'id'     => static fn (string $dir): string => 'id',      // 実行ユーザー（www-data）を確認
+    'whoami' => static fn (string $dir): string => 'whoami',  // 実行ユーザー名だけを確認
 ];
 
 // 許可リスト: 一覧を表示できるディレクトリ（利用者の入力文字列は ls に渡さない）
@@ -31,12 +35,12 @@ $message = '';
 $output = [];
 
 if (!isset($commands[$cmd]) || !isset($dirs[$dir])) {
-    $message = '許可されていない値です。cmd は ls / ls -l / ls -la、dir は . / .. / /tmp のみ指定できます。';
+    $message = '許可されていない値です。cmd は ls / ls -l / ls -la / id / whoami、dir は . / .. / /tmp のみ指定できます。';
 } elseif (!function_exists('exec')) {
     // disable_functions で無効化された関数は function_exists() が false を返す
     $message = 'exec() は無効化されています（php.ini の disable_functions）。この設定が防御として効いています。';
 } else {
-    $line = 'ls ' . $commands[$cmd] . ' ' . escapeshellarg($dirs[$dir]) . ' 2>&1';
+    $line = $commands[$cmd](escapeshellarg($dirs[$dir])) . ' 2>&1';
     exec($line, $output, $status);
     $message = '実行しました: ' . $line . '（終了コード ' . $status . '）';
 }
@@ -61,7 +65,7 @@ $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 <body>
   <h1>exec デモ（教材専用）</h1>
   <p class="warn">
-    教材用の環境でのみ使用してください。実行できるのは <code>ls</code> だけです。実習後は <code>src/public/exec-demo.php</code> を必ず削除してください。
+    教材用の環境でのみ使用してください。実行できるのは <code>ls</code> / <code>id</code> / <code>whoami</code> だけです。実習後は <code>src/public/exec-demo.php</code> を必ず削除してください。
   </p>
 
   <form method="get">

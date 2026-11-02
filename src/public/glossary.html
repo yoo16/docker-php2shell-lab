@@ -265,6 +265,26 @@
           </dd>
         </div>
         <div class="rounded-2xl bg-white p-5 border border-slate-200">
+          <dt class="font-bold text-lg">Web 実行ユーザー（<span class="code">www-data</span> / <span class="code">apache</span>・<span class="code">httpd</span>）</dt>
+          <dd class="mt-2 text-slate-600 leading-relaxed">
+            Web サーバーや PHP は、人のログインユーザーや <span class="code">root</span> ではなく、
+            <strong>権限を絞った専用ユーザー</strong>で動かすのが基本。名前は環境で違うだけで役割は同じ。
+            <ul class="mt-2 space-y-1 text-sm">
+              <li>・Debian / Ubuntu 系・Nginx・PHP-FPM … <span class="code">www-data</span></li>
+              <li>・RHEL / CentOS 系・Apache … <span class="code">apache</span>（プロセス名は <span class="code">httpd</span>）</li>
+              <li>・素の Apache 設定では <span class="code">nobody</span> のこともある</li>
+            </ul>
+            <span class="block mt-2">
+              <strong>なぜ専用ユーザーにするのか：</strong>万一乗っ取られても、
+              被害を<strong>そのユーザーの権限内に閉じ込める</strong>ため（最小権限）。だから <span class="code">root</span> では動かさない。
+            </span>
+            <span class="block mt-2 text-sm text-slate-500">
+              ※ 教材で RCE が成立しても <span class="code">root</span> ではなく <span class="code">www-data</span>（UID 33）止まりだったのはこの設計のおかげ。
+              コードを <span class="code">root</span> 所有・この実行ユーザーには読み取りのみにしておくと、改ざんもされにくい。
+            </span>
+          </dd>
+        </div>
+        <div class="rounded-2xl bg-white p-5 border border-slate-200">
           <dt class="font-bold text-lg">Web サーバー / FastCGI</dt>
           <dd class="mt-2 text-slate-600 leading-relaxed">
             <strong>Web サーバー</strong>はブラウザからの HTTP リクエストを受け取り、ファイルを返したりプログラムの実行を仲介したりするソフト(Nginx・Apache など)。
